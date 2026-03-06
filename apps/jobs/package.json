@@ -1,0 +1,23 @@
+{
+  "name": "@wraexcodex/jobs",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "dev": "bun run --watch src/index.ts",
+    "start": "bun run src/index.ts",
+    "job:sync-items": "bun run src/jobs/sync-items.ts",
+    "job:sync-prices": "bun run src/jobs/sync-prices.ts",
+    "job:sync-passives": "bun run src/jobs/sync-passives.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@wraexcodex/db": "workspace:*",
+    "drizzle-orm": "^0.38.3",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@wraexcodex/config": "workspace:*",
+    "typescript": "^5.7.3",
+    "bun-types": "^1.2.0"
+  }
+}

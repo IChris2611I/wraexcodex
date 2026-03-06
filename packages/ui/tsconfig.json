@@ -1,0 +1,8 @@
+{
+  "extends": "@wraexcodex/config/typescript/nextjs",
+  "compilerOptions": {
+    "rootDir": "src",
+    "noEmit": true
+  },
+  "include": ["src"]
+}

@@ -1,0 +1,7 @@
+{
+  "extends": "@wraexcodex/config/typescript/bun",
+  "compilerOptions": {
+    "outDir": "dist"
+  },
+  "include": ["src", "drizzle.config.ts"]
+}
