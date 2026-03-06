@@ -1,5 +1,9 @@
 import type { Metadata, Viewport } from "next"
 import { ClerkProvider } from "@clerk/nextjs"
+import { Navbar } from "@/components/Navbar"
+import { Footer } from "@/components/Footer"
+import { CommandPalette } from "@/components/CommandPalette"
+import { PageTransition } from "@/components/PageTransition"
 import "@wraexcodex/ui/styles"
 import "./globals.css"
 
@@ -11,7 +15,10 @@ export const metadata: Metadata = {
   },
   description:
     "The definitive Path of Exile 2 reference platform. Items, builds, skills, passives, and AI-powered build advice — all in one place.",
-  keywords: ["Path of Exile 2", "PoE2", "builds", "items", "skills", "passive tree", "wraex codex"],
+  keywords: [
+    "Path of Exile 2", "PoE2", "builds", "items", "skills",
+    "passive tree", "wraex codex", "poe2 builds", "poe2 items",
+  ],
   authors: [{ name: "Wraex Codex" }],
   openGraph: {
     type: "website",
@@ -44,6 +51,8 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   themeColor: "#050508",
   colorScheme: "dark",
+  width: "device-width",
+  initialScale: 1,
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -52,10 +61,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <html lang="en" className="dark">
         <head>
           {/*
-           * Google Fonts — Cinzel (display) + Barlow family (UI + body)
-           * WHY preconnect: establishes the TCP connection to Google's font CDN
-           * before the browser parses the stylesheet link — saves ~150ms on first load.
-           * We'll migrate to next/font (self-hosted) in Week 2 for Core Web Vitals.
+           * Google Fonts — preconnect establishes TCP before stylesheet link is parsed.
+           * Cinzel: display/titles. Barlow Condensed: UI labels. Barlow: body.
+           * Migrating to next/font (self-hosted) in Week 2 — eliminates external request.
            */}
           <link rel="preconnect" href="https://fonts.googleapis.com" />
           <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
@@ -65,7 +73,20 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           />
         </head>
         <body className="bg-forge-950 text-parchment antialiased">
-          {children}
+          {/* Global search palette — listens for wraex:search:open event */}
+          <CommandPalette />
+
+          {/* Sticky navigation */}
+          <Navbar />
+
+          {/* Page content with fade transition */}
+          <PageTransition>
+            {/* pt-16 = navbar height offset so content isn't hidden behind fixed nav */}
+            <div className="flex min-h-screen flex-col pt-16">
+              {children}
+              <Footer />
+            </div>
+          </PageTransition>
         </body>
       </html>
     </ClerkProvider>

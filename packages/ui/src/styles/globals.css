@@ -1,91 +1,123 @@
 /**
- * LootReference Global Styles
+ * Wraex Codex — Global Design System
  *
- * Tailwind v4 uses CSS-first configuration.
- * WHY: Design tokens defined here become both:
- *   1. CSS custom properties (usable anywhere in CSS)
- *   2. Tailwind utility classes (bg-forge-950, text-ember, etc.)
- *
- * Tailwind v4 naming conventions for @theme:
- *   --color-*         → bg-*, text-*, border-*, etc.
- *   --font-*          → font-*
- *   --background-image-* → bg-*  (for named gradients)
- *   --shadow-*        → shadow-*
- *   --animate-*       → animate-*
+ * Tailwind v4 CSS-first configuration.
+ * Every token here becomes both a CSS custom property AND a Tailwind utility.
  */
 
 @import "tailwindcss";
 
 @theme {
-  /* ── Backgrounds ───────────────────────────────────────────── */
+  /* ── Forge backgrounds ─────────────────────────────────────── */
   --color-forge-950: #050508;
   --color-forge-900: #08080f;
   --color-forge-800: #0d0d1a;
   --color-forge-700: #12122a;
+  --color-forge-600: #1a1a3a;
 
-  /* ── Primary accent — ember orange → gold ─────────────────── */
-  --color-ember: #e67e22;
+  /* ── Ember — primary accent (orange → gold) ────────────────── */
+  --color-ember:       #e67e22;
   --color-ember-light: #f39c12;
-  --color-ember-dark: #d35400;
+  --color-ember-dark:  #d35400;
+  --color-ember-muted: rgba(230, 126, 34, 0.15);
 
-  /* ── AI features — rune cyan ───────────────────────────────── */
-  --color-rune: #00d4ff;
-  --color-rune-dark: #0099cc;
+  /* ── Rune — AI / special features (cyan) ──────────────────── */
+  --color-rune:       #00d4ff;
+  --color-rune-dark:  #0099cc;
+  --color-rune-muted: rgba(0, 212, 255, 0.12);
 
-  /* ── Danger / unique items ─────────────────────────────────── */
-  --color-crimson: #c0392b;
+  /* ── Unique / danger ───────────────────────────────────────── */
+  --color-crimson:       #c0392b;
   --color-crimson-light: #e74c3c;
 
-  /* ── Text ──────────────────────────────────────────────────── */
-  --color-parchment: #e8e0d0;
+  /* ── Item rarity colours (used on item pages later) ────────── */
+  --color-rarity-normal:   #c8c8c8;
+  --color-rarity-magic:    #8888ff;
+  --color-rarity-rare:     #ffff77;
+  --color-rarity-unique:   #af6025;
+
+  /* ── Parchment text scale ──────────────────────────────────── */
+  --color-parchment:       #e8e0d0;
   --color-parchment-muted: #7a7060;
-  --color-parchment-dim: #4a4535;
+  --color-parchment-dim:   #4a4535;
+
+  /* ── Surface overlays ──────────────────────────────────────── */
+  --color-surface-1: rgba(255, 255, 255, 0.03);
+  --color-surface-2: rgba(255, 255, 255, 0.06);
+  --color-surface-3: rgba(255, 255, 255, 0.10);
+
+  /* ── Borders ───────────────────────────────────────────────── */
+  --color-border-subtle: rgba(255, 255, 255, 0.06);
+  --color-border-default: rgba(255, 255, 255, 0.10);
+  --color-border-strong: rgba(255, 255, 255, 0.18);
 
   /* ── Typography ────────────────────────────────────────────── */
-  --font-display: "Cinzel", serif;
-  --font-ui: "Barlow Condensed", sans-serif;
-  --font-body: "Barlow", sans-serif;
+  --font-display: "Cinzel", "Georgia", serif;
+  --font-ui:      "Barlow Condensed", "Arial Narrow", sans-serif;
+  --font-body:    "Barlow", "Arial", sans-serif;
+  --font-mono:    "JetBrains Mono", "Fira Code", monospace;
 
-  /* ── Named gradients (bg-forge-gradient, bg-ember-gradient) ── */
-  --background-image-forge-gradient: radial-gradient(ellipse at top, #12122a 0%, #050508 70%);
-  --background-image-ember-gradient: linear-gradient(135deg, #e67e22, #f39c12);
+  /* ── Named gradients ───────────────────────────────────────── */
+  --background-image-forge-gradient:
+    radial-gradient(ellipse at 50% 0%, #1a0a00 0%, #08080f 40%, #050508 100%);
+  --background-image-ember-gradient:
+    linear-gradient(135deg, #e67e22 0%, #f39c12 100%);
+  --background-image-rune-gradient:
+    linear-gradient(135deg, #00d4ff 0%, #0099cc 100%);
+  --background-image-forge-card:
+    linear-gradient(135deg, #0d0d1a 0%, #08080f 100%);
 
   /* ── Shadows ───────────────────────────────────────────────── */
-  --shadow-ember: 0 0 20px rgba(230, 126, 34, 0.35);
-  --shadow-rune: 0 0 20px rgba(0, 212, 255, 0.25);
+  --shadow-ember:        0 0 24px rgba(230, 126, 34, 0.35);
+  --shadow-ember-lg:     0 0 48px rgba(230, 126, 34, 0.25), 0 0 80px rgba(230, 126, 34, 0.10);
+  --shadow-rune:         0 0 24px rgba(0, 212, 255, 0.30);
+  --shadow-card:         0 4px 24px rgba(0, 0, 0, 0.5);
+  --shadow-card-hover:   0 8px 40px rgba(0, 0, 0, 0.7);
   --shadow-item-tooltip: 0 8px 32px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(230, 126, 34, 0.2);
+  --shadow-navbar:       0 1px 0 rgba(255, 255, 255, 0.04);
 
   /* ── Animations ────────────────────────────────────────────── */
-  --animate-fade-in: fadeIn 150ms ease-out;
-  --animate-slide-up: slideUp 200ms ease-out;
-  --animate-ember-pulse: emberPulse 2s ease-in-out infinite;
+  --animate-fade-in:      fadeIn 150ms ease-out;
+  --animate-fade-up:      fadeUp 200ms ease-out;
+  --animate-slide-down:   slideDown 200ms ease-out;
+  --animate-ember-pulse:  emberPulse 3s ease-in-out infinite;
+  --animate-shimmer:      shimmer 2s linear infinite;
 
   @keyframes fadeIn {
     from { opacity: 0; }
     to   { opacity: 1; }
   }
 
-  @keyframes slideUp {
-    from { opacity: 0; transform: translateY(8px); }
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes slideDown {
+    from { opacity: 0; transform: translateY(-8px); }
     to   { opacity: 1; transform: translateY(0); }
   }
 
   @keyframes emberPulse {
-    0%, 100% { box-shadow: 0 0 10px rgba(230, 126, 34, 0.3); }
-    50%       { box-shadow: 0 0 28px rgba(230, 126, 34, 0.65); }
+    0%, 100% { opacity: 0.6; }
+    50%       { opacity: 1; }
+  }
+
+  @keyframes shimmer {
+    from { background-position: -200% center; }
+    to   { background-position: 200% center; }
   }
 }
 
 /* ── Base reset ─────────────────────────────────────────────────── */
 @layer base {
-  *, *::before, *::after {
-    box-sizing: border-box;
-  }
+  *, *::before, *::after { box-sizing: border-box; }
 
   html {
     scroll-behavior: smooth;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
   }
 
   body {
@@ -93,21 +125,91 @@
     color: var(--color-parchment);
     font-family: var(--font-body);
     line-height: 1.6;
+    min-height: 100dvh;
   }
 
-  /* Scrollbar — dark forge aesthetic */
-  ::-webkit-scrollbar       { width: 6px; height: 6px; }
-  ::-webkit-scrollbar-track { background: var(--color-forge-900); }
-  ::-webkit-scrollbar-thumb {
-    background: var(--color-parchment-dim);
-    border-radius: 3px;
-  }
+  /* Scrollbar */
+  ::-webkit-scrollbar       { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--color-parchment-dim); border-radius: 99px; }
   ::-webkit-scrollbar-thumb:hover { background: var(--color-ember); }
 
-  /* Focus ring — accessibility */
+  /* Focus ring */
   :focus-visible {
     outline: 2px solid var(--color-ember);
     outline-offset: 2px;
-    border-radius: 2px;
+    border-radius: 3px;
   }
+
+  /* Selection */
+  ::selection {
+    background: rgba(230, 126, 34, 0.25);
+    color: var(--color-parchment);
+  }
+}
+
+/* ── Utility classes ─────────────────────────────────────────────── */
+@layer utilities {
+  /* Glass surface — subtle frosted card */
+  .glass {
+    background: rgba(8, 8, 15, 0.75);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--color-border-subtle);
+  }
+
+  /* Gradient text — ember */
+  .text-gradient-ember {
+    background: linear-gradient(135deg, #e67e22, #f39c12);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* Gradient text — rune */
+  .text-gradient-rune {
+    background: linear-gradient(135deg, #00d4ff, #0099cc);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* Divider with ember glow at center */
+  .divider-ember {
+    height: 1px;
+    background: linear-gradient(
+      to right,
+      transparent 0%,
+      rgba(230, 126, 34, 0.4) 50%,
+      transparent 100%
+    );
+  }
+
+  /* Ember glow border */
+  .border-ember-glow {
+    border-color: rgba(230, 126, 34, 0.3);
+    box-shadow: 0 0 0 1px rgba(230, 126, 34, 0.1), inset 0 0 0 1px rgba(230, 126, 34, 0.05);
+  }
+
+  /* Noise texture overlay — adds grain to flat surfaces */
+  .noise::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  /* Forge card background */
+  .bg-forge-card {
+    background: linear-gradient(135deg, #0d0d1a 0%, #08080f 100%);
+  }
+
+  /* Hide scrollbar but keep scroll */
+  .scrollbar-none {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .scrollbar-none::-webkit-scrollbar { display: none; }
 }
