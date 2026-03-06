@@ -34,7 +34,7 @@ export const itemCategoryEnum = pgEnum("item_category", [
 /**
  * ITEMS TABLE
  *
- * The heart of LootReference. Every item in PoE2.
+ * The heart of Wraex Codex. Every item in PoE2.
  *
  * Design decisions:
  * - `slug` for human-readable URLs (/items/mirror-of-kalandra) — critical for SEO

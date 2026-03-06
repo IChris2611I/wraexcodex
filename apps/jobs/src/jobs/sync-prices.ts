@@ -38,13 +38,13 @@ const PoeNinjaResponseSchema = z.object({
 // The current active league — should come from config/env in production
 const CURRENT_LEAGUE = process.env.CURRENT_LEAGUE ?? "Standard"
 
+// Confirmed working types for poe2 on poe.ninja (tested 2026-03-07)
 const ITEM_TYPES = [
   "UniqueWeapon",
   "UniqueArmour",
   "UniqueAccessory",
   "UniqueFlask",
   "UniqueJewel",
-  "UniqueMap",
   "DivinationCard",
 ] as const
 
@@ -64,7 +64,7 @@ async function syncPriceType(itemType: string): Promise<void> {
   const url = `https://poe.ninja/api/data/itemoverview?league=${encodeURIComponent(CURRENT_LEAGUE)}&type=${itemType}`
 
   const res = await fetch(url, {
-    headers: { "User-Agent": "LootReference/1.0 (contact@lootreference.com)" },
+    headers: { "User-Agent": "WraexCodex/1.0 (contact@wraexcodex.com)" },
   })
 
   if (!res.ok) {

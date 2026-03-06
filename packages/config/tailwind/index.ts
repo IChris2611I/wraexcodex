@@ -1,7 +1,7 @@
 import type { Config } from "tailwindcss"
 
 /**
- * LootReference Design Tokens
+ * Wraex Codex Design Tokens
  *
  * WHY: Centralise every colour, font, and spacing token here so all apps
  * share the same brand identity. Change one value → updates everywhere.

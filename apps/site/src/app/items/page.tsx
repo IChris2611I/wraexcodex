@@ -17,6 +17,7 @@ import type { Metadata } from "next"
 import Image from "next/image"
 import Link from "next/link"
 import { db, eq, and, sql } from "@wraexcodex/db"
+import { resolveIconUrl } from "@/lib/item-icon"
 import type { SQL } from "@wraexcodex/db"
 import { items } from "@wraexcodex/db/schema"
 
@@ -377,13 +378,14 @@ function ItemCard({ item }: { item: ItemRow }) {
       className="group flex flex-col items-center gap-2 rounded-sm border border-border-subtle bg-forge-card p-3 text-center transition-all duration-150 hover:-translate-y-0.5 hover:border-ember/30 hover:shadow-card"
     >
       <div className="flex h-14 w-14 items-center justify-center rounded-sm bg-forge-800/60 ring-1 ring-border-subtle group-hover:ring-ember/20">
-        {item.iconUrl ? (
+        {resolveIconUrl(item.iconUrl) ? (
           <Image
-            src={item.iconUrl}
+            src={resolveIconUrl(item.iconUrl)!}
             alt={item.name}
             width={48}
             height={48}
             className="h-12 w-12 object-contain"
+            unoptimized
           />
         ) : (
           <ItemPlaceholderIcon category={item.category} />

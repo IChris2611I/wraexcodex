@@ -23,6 +23,7 @@ import { notFound } from "next/navigation"
 import Image from "next/image"
 import { db, eq } from "@wraexcodex/db"
 import { items } from "@wraexcodex/db/schema"
+import { resolveIconUrl } from "@/lib/item-icon"
 
 export const revalidate = 21600
 
@@ -187,14 +188,15 @@ export default async function ItemDetailPage({
               {/* Header band */}
               <div className={`border-b ${styles.border} px-5 py-4 text-center`}>
                 {/* Icon */}
-                {item.iconUrl ? (
+                {resolveIconUrl(item.iconUrl) ? (
                   <div className="mb-3 flex justify-center">
                     <Image
-                      src={item.iconUrl}
+                      src={resolveIconUrl(item.iconUrl)!}
                       alt={item.name}
                       width={64}
                       height={64}
                       className="h-16 w-16 object-contain"
+                      unoptimized
                     />
                   </div>
                 ) : (

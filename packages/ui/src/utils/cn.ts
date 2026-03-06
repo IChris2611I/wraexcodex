@@ -10,7 +10,7 @@ import { twMerge } from "tailwind-merge"
  *   Without it, both classes are in the string but only the last one wins
  *   based on CSS specificity — unpredictable. tailwind-merge makes it explicit.
  *
- * Every component in LootReference uses this. It is the single most-called
+ * Every component in Wraex Codex uses this. It is the single most-called
  * utility in the entire codebase.
  */
 export function cn(...inputs: ClassValue[]): string {

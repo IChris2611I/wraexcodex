@@ -360,9 +360,9 @@ export async function syncIcons(): Promise<void> {
     .select({ count: sql<number>`COUNT(*)::int` })
     .from(items)
 
-  const coverage = total.count > 0
-    ? Math.round((withIcons.count / total.count) * 100)
-    : 0
+  const totalCount = total?.count ?? 0
+  const withIconCount = withIcons?.count ?? 0
+  const coverage = totalCount > 0 ? Math.round((withIconCount / totalCount) * 100) : 0
 
   console.log(`\n[sync-icons] ✓ Done`)
   console.log(`  Enrichment map:  ${enrichMap.size} names`)
@@ -370,5 +370,5 @@ export async function syncIcons(): Promise<void> {
   console.log(`  DB updated:      ${updatedCount}`)
   console.log(`  DB errors:       ${errorCount}`)
   console.log(`  DB no match:     ${noMatchCount}`)
-  console.log(`  Items with icon: ${withIcons.count} / ${total.count} (${coverage}%)`)
+  console.log(`  Items with icon: ${withIconCount} / ${totalCount} (${coverage}%)`)
 }

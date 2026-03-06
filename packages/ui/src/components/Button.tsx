@@ -10,7 +10,7 @@ import type { ButtonHTMLAttributes } from "react"
  * auto-generated. Adding a new variant = one object key. The component
  * consumer gets full autocomplete. No switch statements, no prop drilling.
  *
- * Variants follow LootReference's design language:
+ * Variants follow Wraex Codex's design language:
  * - `ember` — primary CTA, orange glow, used for the main action on any page
  * - `rune` — AI features, cyan, used for Oracle / AI-powered interactions
  * - `ghost` — secondary action, minimal visual weight

@@ -1,5 +1,5 @@
 /**
- * The Herald — LootReference Discord Bot
+ * The Herald — Wraex Codex Discord Bot
  *
  * Runtime: Bun (not Node.js)
  * WHY Bun for the bot: Bun's startup time is ~3x faster than Node.js.

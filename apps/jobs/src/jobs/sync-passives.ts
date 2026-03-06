@@ -199,7 +199,6 @@ export async function syncPassives(): Promise<void> {
           description: passiveNodes.description,
           iconUrl: passiveNodes.iconUrl,
           dataVersion: passiveNodes.dataVersion,
-          updatedAt: new Date(),
         },
       })
     upsertCount += batch.length

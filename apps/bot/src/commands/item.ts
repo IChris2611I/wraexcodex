@@ -30,10 +30,10 @@ export const itemCommand: Command = {
       .setTitle(itemName)
       .setDescription(
         "Item data coming soon — database integration in Week 1.\n\n" +
-        `Search [${itemName}](https://lootreference.com/items?q=${encodeURIComponent(itemName)}) on LootReference`
+        `Search [${itemName}](https://wraexcodex.com/items?q=${encodeURIComponent(itemName)}) on Wraex Codex`
       )
       .setColor(0xe67e22) // ember orange
-      .setFooter({ text: "LootReference — lootreference.com" })
+      .setFooter({ text: "Wraex Codex — wraexcodex.com" })
       .setTimestamp()
 
     await interaction.editReply({ embeds: [embed] })

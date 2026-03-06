@@ -1,5 +1,6 @@
 import { db } from "@wraexcodex/db/client"
 import { items } from "@wraexcodex/db/schema"
+import { sql } from "drizzle-orm"
 import { z } from "zod"
 
 /**
@@ -243,14 +244,11 @@ export async function syncItems(): Promise<void> {
   }
 
   // ── Verify ────────────────────────────────────────────────────────────────
-  const countResult = await db.execute(
-    // Raw SQL — Drizzle's count helper requires an import we don't need to add
-    // for a one-off verification query. ts-expect-error suppresses the overload warning.
-    // @ts-expect-error raw SQL
-    `SELECT COUNT(*)::int AS count FROM items`
-  )
+  const [countResult] = await db
+    .select({ count: sql<number>`COUNT(*)::int` })
+    .from(items)
 
-  const dbTotal = (countResult as unknown as Array<{ count: number }>)[0]?.count ?? "?"
+  const dbTotal = countResult?.count ?? "?"
 
   console.log(`\n[sync-items] ✓ Done`)
   console.log(`  Collected: ${records.length}`)

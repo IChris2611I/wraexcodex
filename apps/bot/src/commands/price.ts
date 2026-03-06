@@ -17,10 +17,10 @@ export const priceCommand: Command = {
       .setTitle(`Price: ${itemName}`)
       .setDescription(
         `Live price integration (poe.ninja) coming soon.\n\n` +
-        `[Check price](https://lootreference.com/economy?q=${encodeURIComponent(itemName)}) on LootReference`
+        `[Check price](https://wraexcodex.com/economy?q=${encodeURIComponent(itemName)}) on Wraex Codex`
       )
       .setColor(0xe67e22)
-      .setFooter({ text: "LootReference — lootreference.com" })
+      .setFooter({ text: "Wraex Codex — wraexcodex.com" })
 
     await interaction.editReply({ embeds: [embed] })
   },

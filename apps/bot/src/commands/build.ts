@@ -28,10 +28,10 @@ export const buildCommand: Command = {
       .setTitle(`Top ${cls.charAt(0).toUpperCase() + cls.slice(1)} Builds`)
       .setDescription(
         `Build database integration coming soon.\n\n` +
-        `[Browse ${cls} builds](https://lootreference.com/builds?class=${cls}${budget ? `&budget=${budget}` : ""}) on LootReference`
+        `[Browse ${cls} builds](https://wraexcodex.com/builds?class=${cls}${budget ? `&budget=${budget}` : ""}) on Wraex Codex`
       )
       .setColor(0xe67e22)
-      .setFooter({ text: "LootReference — lootreference.com" })
+      .setFooter({ text: "Wraex Codex — wraexcodex.com" })
 
     await interaction.editReply({ embeds: [embed] })
   },

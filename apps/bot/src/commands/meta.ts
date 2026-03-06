@@ -13,10 +13,10 @@ export const metaCommand: Command = {
       .setTitle("Current Meta — S Tier Builds")
       .setDescription(
         `Live meta tracker coming soon.\n\n` +
-        `[View full tier list](https://lootreference.com/meta) on LootReference`
+        `[View full tier list](https://wraexcodex.com/meta) on Wraex Codex`
       )
       .setColor(0xe67e22)
-      .setFooter({ text: "LootReference — lootreference.com" })
+      .setFooter({ text: "Wraex Codex — wraexcodex.com" })
 
     await interaction.editReply({ embeds: [embed] })
   },
