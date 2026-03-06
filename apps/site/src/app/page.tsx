@@ -1,45 +1,64 @@
 /**
- * Homepage — the first thing a player sees.
+ * Homepage
  *
- * This is a Server Component. It renders on the server with zero client JS
- * for the shell. The animated elements will be progressively enhanced with
- * client-side Framer Motion in Week 2.
+ * Server Component — zero client JS for the shell.
+ * Framer Motion animations added in Week 2.
  *
- * Structure:
- * 1. Hero — tagline, search bar, call to action
- * 2. Feature highlights — The Codex, The Forge, The Oracle, The Nexus
- * 3. Live economy strip — top 5 items by price (placeholder for now)
+ * Sections:
+ * 1. Hero     — title, tagline, search, CTAs
+ * 2. Features — 4 pillar cards (Codex, Forge, Oracle, Nexus)
  */
 
 export default function HomePage() {
   return (
-    <main className="min-h-screen bg-forge-gradient">
-      {/* === HERO === */}
-      <section className="relative flex min-h-screen flex-col items-center justify-center px-4 text-center">
-        {/* Background glow */}
+    <main className="min-h-screen bg-forge-gradient font-body">
+
+      {/* ═══════════════════════════════════════════════════════
+          HERO
+      ═══════════════════════════════════════════════════════ */}
+      <section className="relative flex min-h-screen flex-col items-center justify-center px-6 text-center">
+
+        {/* Radial ember glow behind title */}
         <div
-          className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_30%,rgba(230,126,34,0.08)_0%,transparent_60%)]"
+          className="pointer-events-none absolute inset-0"
+          style={{
+            background:
+              "radial-gradient(ellipse 60% 40% at 50% 35%, rgba(230,126,34,0.10) 0%, transparent 70%)",
+          }}
           aria-hidden
         />
 
-        {/* Eyebrow */}
-        <p className="font-ui text-xs font-semibold uppercase tracking-[0.3em] text-ember opacity-80">
+        {/* Eyebrow label */}
+        <p
+          className="font-ui text-xs font-semibold uppercase tracking-[0.35em] text-ember"
+          style={{ opacity: 0.85 }}
+        >
           Path of Exile 2 Reference
         </p>
 
-        {/* Title */}
-        <h1 className="mt-4 font-display text-5xl font-black leading-tight tracking-tight text-parchment md:text-7xl lg:text-8xl">
+        {/* Title — "Loot" plain + "Reference" ember gradient */}
+        <h1 className="mt-3 font-display text-6xl font-black leading-none tracking-tight text-parchment md:text-7xl lg:text-8xl">
           Loot
-          <span className="bg-ember-gradient bg-clip-text text-transparent">Reference</span>
+          <span
+            className="ml-1"
+            style={{
+              background: "linear-gradient(135deg, #e67e22, #f39c12)",
+              WebkitBackgroundClip: "text",
+              WebkitTextFillColor: "transparent",
+              backgroundClip: "text",
+            }}
+          >
+            Reference
+          </span>
         </h1>
 
         {/* Tagline */}
-        <p className="mt-6 max-w-xl font-body text-lg text-parchment-muted md:text-xl">
+        <p className="mt-5 max-w-lg font-body text-lg text-parchment-muted md:text-xl">
           The knowledge of Wraeclast, forged into data.
         </p>
 
-        {/* Search bar — placeholder, wired to Meilisearch in Week 2 */}
-        <div className="mt-10 w-full max-w-xl">
+        {/* Search bar */}
+        <div className="mt-10 w-full max-w-2xl">
           <div className="relative">
             <input
               type="search"
@@ -47,7 +66,7 @@ export default function HomePage() {
               className="w-full rounded-sm border border-parchment-dim bg-forge-900 px-5 py-4 font-body text-base text-parchment placeholder:text-parchment-muted focus:border-ember focus:outline-none focus:ring-1 focus:ring-ember"
               aria-label="Search LootReference"
             />
-            <kbd className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 font-ui text-xs text-parchment-dim">
+            <kbd className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 rounded border border-parchment-dim px-1.5 py-0.5 font-ui text-[10px] text-parchment-dim">
               ⌘K
             </kbd>
           </div>
@@ -57,87 +76,166 @@ export default function HomePage() {
         <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
           <a
             href="/builds"
-            className="inline-flex h-10 items-center rounded-sm border border-ember bg-ember px-6 font-ui text-sm font-semibold tracking-wide text-forge-950 transition-all hover:bg-ember-light"
+            className="inline-flex h-11 items-center rounded-sm border border-ember bg-ember px-7 font-ui text-sm font-semibold uppercase tracking-wider text-forge-950 transition-all duration-150 hover:bg-ember-light hover:shadow-ember"
           >
             Browse Builds
           </a>
           <a
             href="/items"
-            className="inline-flex h-10 items-center rounded-sm border border-parchment-dim px-6 font-ui text-sm font-semibold tracking-wide text-parchment-muted transition-all hover:border-parchment hover:text-parchment"
+            className="inline-flex h-11 items-center rounded-sm border border-parchment-dim px-7 font-ui text-sm font-semibold uppercase tracking-wider text-parchment-muted transition-all duration-150 hover:border-parchment hover:text-parchment"
           >
             Item Database
           </a>
         </div>
-      </section>
 
-      {/* === FEATURES === */}
-      <section className="mx-auto max-w-6xl px-4 py-24">
-        <h2 className="text-center font-display text-3xl font-bold text-parchment">
-          Everything You Need. Nothing You Don&apos;t.
-        </h2>
-        <div className="mt-12 grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-          {features.map((feature) => (
-            <FeatureCard key={feature.title} {...feature} />
-          ))}
+        {/* Scroll hint */}
+        <div className="absolute bottom-10 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 opacity-30">
+          <span className="font-ui text-[10px] uppercase tracking-widest text-parchment-muted">
+            Explore
+          </span>
+          <div className="h-6 w-px bg-parchment-muted" />
         </div>
       </section>
+
+      {/* ═══════════════════════════════════════════════════════
+          FEATURES
+      ═══════════════════════════════════════════════════════ */}
+      <section className="mx-auto max-w-6xl px-6 pb-32 pt-4">
+
+        {/* Section header */}
+        <div className="mb-12 text-center">
+          <p className="font-ui text-xs uppercase tracking-[0.3em] text-ember" style={{ opacity: 0.7 }}>
+            Four Pillars
+          </p>
+          <h2 className="mt-2 font-display text-3xl font-bold text-parchment md:text-4xl">
+            Everything You Need. Nothing You Don&apos;t.
+          </h2>
+        </div>
+
+        {/* Feature cards grid */}
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          {FEATURES.map((f) => (
+            <FeatureCard key={f.title} {...f} />
+          ))}
+        </div>
+
+        {/* Divider */}
+        <div className="mt-20 flex items-center gap-6">
+          <div className="h-px flex-1 bg-parchment-dim opacity-20" />
+          <span className="font-ui text-xs uppercase tracking-widest text-parchment-dim opacity-40">
+            More coming soon
+          </span>
+          <div className="h-px flex-1 bg-parchment-dim opacity-20" />
+        </div>
+      </section>
+
     </main>
   )
 }
 
+/* ── Types & data ─────────────────────────────────────────────── */
+
 type Feature = {
   icon: string
   title: string
+  subtitle: string
   description: string
   href: string
   accent: "ember" | "rune"
 }
 
-const features: Feature[] = [
+const FEATURES: Feature[] = [
   {
     icon: "📖",
     title: "The Codex",
-    description: "Every item, skill, boss, and passive. Full stats, drop locations, and pixel-perfect item tooltips.",
+    subtitle: "Item & Skill Database",
+    description:
+      "Every item, skill, boss, and passive. Full stats, drop locations, in-game tooltips, and live trade prices.",
     href: "/items",
     accent: "ember",
   },
   {
     icon: "⚒️",
     title: "The Forge",
-    description: "Build browser, community guides, gear planners, and budget calculators.",
+    subtitle: "Build System",
+    description:
+      "Community build guides, gear planners, budget calculators, and a DPS simulator. Find your perfect build.",
     href: "/builds",
     accent: "ember",
   },
   {
     icon: "🔮",
     title: "The Oracle",
-    description: "AI-powered build advisor. Describe what you want — get a full expert recommendation.",
+    subtitle: "AI Build Advisor",
+    description:
+      "Describe what you want in plain language. The Oracle cross-references every build and returns expert recommendations.",
     href: "/oracle",
     accent: "rune",
   },
   {
     icon: "🌐",
     title: "The Nexus",
-    description: "Full interactive passive tree. Zoom, pan, allocate nodes, import builds — in the browser.",
+    subtitle: "Interactive Passive Tree",
+    description:
+      "Full PoE2 passive tree in your browser. Zoom, pan, allocate nodes, import builds. No install required.",
     href: "/nexus",
     accent: "rune",
   },
 ]
 
-function FeatureCard({ icon, title, description, href, accent }: Feature) {
-  const borderColor = accent === "rune" ? "border-rune/20 hover:border-rune/50" : "border-ember/20 hover:border-ember/40"
-  const iconBg = accent === "rune" ? "bg-rune/10 text-rune" : "bg-ember/10 text-ember"
+function FeatureCard({ icon, title, subtitle, description, href, accent }: Feature) {
+  const isRune = accent === "rune"
 
   return (
     <a
       href={href}
-      className={`group block rounded-sm border ${borderColor} bg-forge-900 p-6 transition-all duration-200 hover:bg-forge-800`}
+      className="group relative flex flex-col rounded-sm border bg-forge-900 p-6 transition-all duration-200 hover:bg-forge-800"
+      style={{
+        borderColor: isRune ? "rgba(0,212,255,0.15)" : "rgba(230,126,34,0.15)",
+      }}
+      onMouseEnter={(e) => {
+        ;(e.currentTarget as HTMLElement).style.borderColor = isRune
+          ? "rgba(0,212,255,0.45)"
+          : "rgba(230,126,34,0.45)"
+      }}
+      onMouseLeave={(e) => {
+        ;(e.currentTarget as HTMLElement).style.borderColor = isRune
+          ? "rgba(0,212,255,0.15)"
+          : "rgba(230,126,34,0.15)"
+      }}
     >
-      <div className={`mb-4 inline-flex size-10 items-center justify-center rounded-sm text-lg ${iconBg}`}>
+      {/* Icon badge */}
+      <div
+        className="mb-4 inline-flex size-11 items-center justify-center rounded-sm text-xl"
+        style={{
+          background: isRune ? "rgba(0,212,255,0.08)" : "rgba(230,126,34,0.08)",
+          color: isRune ? "#00d4ff" : "#e67e22",
+        }}
+      >
         {icon}
       </div>
+
+      {/* Title */}
       <h3 className="font-display text-lg font-semibold text-parchment">{title}</h3>
-      <p className="mt-2 font-body text-sm text-parchment-muted">{description}</p>
+
+      {/* Subtitle */}
+      <p
+        className="mt-0.5 font-ui text-xs uppercase tracking-wider"
+        style={{ color: isRune ? "#00d4ff" : "#e67e22", opacity: 0.75 }}
+      >
+        {subtitle}
+      </p>
+
+      {/* Description */}
+      <p className="mt-3 font-body text-sm leading-relaxed text-parchment-muted">{description}</p>
+
+      {/* Arrow — appears on hover */}
+      <span
+        className="mt-4 font-ui text-xs uppercase tracking-wider opacity-0 transition-opacity duration-150 group-hover:opacity-100"
+        style={{ color: isRune ? "#00d4ff" : "#e67e22" }}
+      >
+        Explore →
+      </span>
     </a>
   )
 }

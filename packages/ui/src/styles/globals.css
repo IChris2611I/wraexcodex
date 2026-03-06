@@ -2,66 +2,81 @@
  * LootReference Global Styles
  *
  * Tailwind v4 uses CSS-first configuration.
- * WHY: In Tailwind v4, the config moved from tailwind.config.js into CSS.
- * This means design tokens are defined here and are available as CSS custom
- * properties everywhere — including in vanilla CSS, not just Tailwind classes.
+ * WHY: Design tokens defined here become both:
+ *   1. CSS custom properties (usable anywhere in CSS)
+ *   2. Tailwind utility classes (bg-forge-950, text-ember, etc.)
+ *
+ * Tailwind v4 naming conventions for @theme:
+ *   --color-*         → bg-*, text-*, border-*, etc.
+ *   --font-*          → font-*
+ *   --background-image-* → bg-*  (for named gradients)
+ *   --shadow-*        → shadow-*
+ *   --animate-*       → animate-*
  */
 
 @import "tailwindcss";
 
 @theme {
-  /* Backgrounds — forge aesthetic */
+  /* ── Backgrounds ───────────────────────────────────────────── */
   --color-forge-950: #050508;
   --color-forge-900: #08080f;
   --color-forge-800: #0d0d1a;
   --color-forge-700: #12122a;
 
-  /* Primary accent — ember orange to gold */
+  /* ── Primary accent — ember orange → gold ─────────────────── */
   --color-ember: #e67e22;
   --color-ember-light: #f39c12;
   --color-ember-dark: #d35400;
 
-  /* AI features — rune cyan */
+  /* ── AI features — rune cyan ───────────────────────────────── */
   --color-rune: #00d4ff;
   --color-rune-dark: #0099cc;
-  --color-rune-glow: rgba(0, 212, 255, 0.15);
 
-  /* Danger / unique items */
+  /* ── Danger / unique items ─────────────────────────────────── */
   --color-crimson: #c0392b;
   --color-crimson-light: #e74c3c;
 
-  /* Text */
+  /* ── Text ──────────────────────────────────────────────────── */
   --color-parchment: #e8e0d0;
   --color-parchment-muted: #7a7060;
   --color-parchment-dim: #4a4535;
 
-  /* Typography */
+  /* ── Typography ────────────────────────────────────────────── */
   --font-display: "Cinzel", serif;
   --font-ui: "Barlow Condensed", sans-serif;
   --font-body: "Barlow", sans-serif;
 
-  /* Animations */
+  /* ── Named gradients (bg-forge-gradient, bg-ember-gradient) ── */
+  --background-image-forge-gradient: radial-gradient(ellipse at top, #12122a 0%, #050508 70%);
+  --background-image-ember-gradient: linear-gradient(135deg, #e67e22, #f39c12);
+
+  /* ── Shadows ───────────────────────────────────────────────── */
+  --shadow-ember: 0 0 20px rgba(230, 126, 34, 0.35);
+  --shadow-rune: 0 0 20px rgba(0, 212, 255, 0.25);
+  --shadow-item-tooltip: 0 8px 32px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(230, 126, 34, 0.2);
+
+  /* ── Animations ────────────────────────────────────────────── */
   --animate-fade-in: fadeIn 150ms ease-out;
   --animate-slide-up: slideUp 200ms ease-out;
   --animate-ember-pulse: emberPulse 2s ease-in-out infinite;
 
   @keyframes fadeIn {
     from { opacity: 0; }
-    to { opacity: 1; }
+    to   { opacity: 1; }
   }
 
   @keyframes slideUp {
     from { opacity: 0; transform: translateY(8px); }
-    to { opacity: 1; transform: translateY(0); }
+    to   { opacity: 1; transform: translateY(0); }
   }
 
   @keyframes emberPulse {
     0%, 100% { box-shadow: 0 0 10px rgba(230, 126, 34, 0.3); }
-    50% { box-shadow: 0 0 25px rgba(230, 126, 34, 0.6); }
+    50%       { box-shadow: 0 0 28px rgba(230, 126, 34, 0.65); }
   }
 }
 
-/* Base reset and global defaults */
+/* ── Base reset ─────────────────────────────────────────────────── */
 @layer base {
   *, *::before, *::after {
     box-sizing: border-box;
@@ -80,24 +95,14 @@
     line-height: 1.6;
   }
 
-  /* Scrollbar styling — dark forge aesthetic */
-  ::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
-  }
-
-  ::-webkit-scrollbar-track {
-    background: var(--color-forge-900);
-  }
-
+  /* Scrollbar — dark forge aesthetic */
+  ::-webkit-scrollbar       { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--color-forge-900); }
   ::-webkit-scrollbar-thumb {
     background: var(--color-parchment-dim);
     border-radius: 3px;
   }
-
-  ::-webkit-scrollbar-thumb:hover {
-    background: var(--color-ember);
-  }
+  ::-webkit-scrollbar-thumb:hover { background: var(--color-ember); }
 
   /* Focus ring — accessibility */
   :focus-visible {
