@@ -10,7 +10,7 @@ export default function NotFound() {
         href="/"
         className="mt-8 inline-flex h-10 items-center rounded-sm border border-ember bg-ember px-6 font-ui text-sm font-semibold tracking-wide text-forge-950 transition-all hover:bg-ember-light"
       >
-        Return to Safety
+        Return to the Codex
       </a>
     </main>
   )

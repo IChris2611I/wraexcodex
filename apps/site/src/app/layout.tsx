@@ -3,51 +3,28 @@ import { ClerkProvider } from "@clerk/nextjs"
 import "@wraexcodex/ui/styles"
 import "./globals.css"
 
-/**
- * Root Layout — the persistent shell around every page.
- *
- * WHY this is a Server Component by default (no "use client"):
- * In Next.js App Router, layouts are Server Components unless you add "use client".
- * Server Components render on the server — no JS sent to the browser for this file.
- * ClerkProvider needs to be here (at the root) to make auth available everywhere,
- * but Clerk's Next.js adapter handles the client-side hydration internally.
- *
- * WHY fonts via CSS @import (not next/font):
- * Cinzel and Barlow are on Google Fonts. next/font would self-host them.
- * Self-hosting is strictly better for performance (no external DNS lookup,
- * no cross-origin resource request). We'll migrate to next/font in Week 2
- * when we're tuning Core Web Vitals.
- */
-
 export const metadata: Metadata = {
-  metadataBase: new URL("https://lootreference.com"),
+  metadataBase: new URL("https://wraexcodex.com"),
   title: {
-    default: "LootReference — The Wraeclast Codex",
-    template: "%s | LootReference",
+    default: "Wraex Codex — The Wraeclast Codex",
+    template: "%s | Wraex Codex",
   },
   description:
     "The definitive Path of Exile 2 reference platform. Items, builds, skills, passives, and AI-powered build advice — all in one place.",
-  keywords: ["Path of Exile 2", "PoE2", "builds", "items", "skills", "passive tree"],
-  authors: [{ name: "LootReference" }],
+  keywords: ["Path of Exile 2", "PoE2", "builds", "items", "skills", "passive tree", "wraex codex"],
+  authors: [{ name: "Wraex Codex" }],
   openGraph: {
     type: "website",
     locale: "en_US",
-    url: "https://lootreference.com",
-    siteName: "LootReference",
-    title: "LootReference — The Wraeclast Codex",
+    url: "https://wraexcodex.com",
+    siteName: "Wraex Codex",
+    title: "Wraex Codex — The Wraeclast Codex",
     description: "The definitive Path of Exile 2 reference platform.",
-    images: [
-      {
-        url: "/og-default.jpg",
-        width: 1200,
-        height: 630,
-        alt: "LootReference",
-      },
-    ],
+    images: [{ url: "/og-default.jpg", width: 1200, height: 630, alt: "Wraex Codex" }],
   },
   twitter: {
     card: "summary_large_image",
-    title: "LootReference — The Wraeclast Codex",
+    title: "Wraex Codex — The Wraeclast Codex",
     description: "The definitive Path of Exile 2 reference platform.",
     images: ["/og-default.jpg"],
   },
@@ -74,7 +51,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <ClerkProvider>
       <html lang="en" className="dark">
         <head>
-          {/* Google Fonts — Cinzel (display) + Barlow family (UI + body) */}
+          {/*
+           * Google Fonts — Cinzel (display) + Barlow family (UI + body)
+           * WHY preconnect: establishes the TCP connection to Google's font CDN
+           * before the browser parses the stylesheet link — saves ~150ms on first load.
+           * We'll migrate to next/font (self-hosted) in Week 2 for Core Web Vitals.
+           */}
           <link rel="preconnect" href="https://fonts.googleapis.com" />
           <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
           <link
