@@ -11,16 +11,16 @@
     "clean": "rm -rf .next"
   },
   "dependencies": {
+    "@clerk/nextjs": "^6.9.0",
+    "@wraexcodex/config": "workspace:*",
     "@wraexcodex/db": "workspace:*",
     "@wraexcodex/ui": "workspace:*",
-    "@wraexcodex/config": "workspace:*",
+    "framer-motion": "^12.4.3",
     "next": "^15.1.6",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "framer-motion": "^12.4.3",
-    "@clerk/nextjs": "^6.9.0",
-    "zod": "^3.24.1",
-    "server-only": "^0.0.1"
+    "server-only": "^0.0.1",
+    "zod": "^3.24.1"
   },
   "devDependencies": {
     "@types/node": "^22.10.7",

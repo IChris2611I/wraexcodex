@@ -12,6 +12,11 @@
 export { db } from "./client"
 export type { Database } from "./client"
 
+// Re-export drizzle query helpers so consumers don't need to install drizzle-orm separately
+// (avoids version mismatch between packages)
+export { eq, and, or, sql, desc, asc, gt, gte, lt, lte, isNull, isNotNull, inArray } from "drizzle-orm"
+export type { SQL } from "drizzle-orm"
+
 // Re-export all inferred types for consumers
 export type { Item, NewItem, ItemMod } from "./schema/items"
 export type { Skill, NewSkill, SkillLevelData, QualityStat } from "./schema/skills"

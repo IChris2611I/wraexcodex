@@ -55,9 +55,22 @@ export const viewport: Viewport = {
   initialScale: 1,
 }
 
+// WHY conditional ClerkProvider:
+// Clerk throws at build time and during `next dev` if NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
+// is empty. Wrapping conditionally lets the site build and run without Clerk configured —
+// auth-protected routes simply won't redirect to sign-in until the key is added.
+const hasClerk = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY)
+
+function MaybeClerkProvider({ children }: { children: React.ReactNode }) {
+  if (hasClerk) {
+    return <ClerkProvider>{children}</ClerkProvider>
+  }
+  return <>{children}</>
+}
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <ClerkProvider>
+    <MaybeClerkProvider>
       <html lang="en" className="dark">
         <head>
           {/*
@@ -89,6 +102,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           </PageTransition>
         </body>
       </html>
-    </ClerkProvider>
+    </MaybeClerkProvider>
   )
 }

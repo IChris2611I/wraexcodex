@@ -55,7 +55,7 @@ export const db = new Proxy({} as DrizzleClient, {
         globalThis.__db = _db
       }
     }
-    return (_db as Record<string | symbol, unknown>)[prop]
+    return (_db as unknown as Record<string | symbol, unknown>)[prop]
   },
 })
 
