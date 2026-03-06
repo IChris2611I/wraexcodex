@@ -1,172 +1,209 @@
 import { db } from "@wraexcodex/db/client"
 import { passiveNodes } from "@wraexcodex/db/schema"
-import { z } from "zod"
 
 /**
- * Passive Tree Sync — GGG Official API
+ * Passive Tree Sync — poe2db.tw
  *
- * GGG publishes the complete passive tree as JSON.
- * This powers The Nexus — our interactive passive tree renderer.
+ * WHY poe2db and not GGG directly:
+ * The GGG passive tree endpoint (pathofexile.com/passive-skill-tree/passive-tree-2)
+ * returns HTML — the tree data is embedded in JS bundles, not a REST endpoint.
  *
- * PoE2 passive tree endpoint:
- * https://www.pathofexile.com/passive-skill-tree/passive-tree-2
+ * poe2db.tw maintains a cleaned JSON export at:
+ *   https://poe2db.tw/data/passive-skill-tree/4.4/data_us.json
  *
- * The response is a large JSON object (several MB) containing:
- * - groups: radial layout groups of nodes
- * - nodes: every passive node with position, stats, and connections
- * - constants: orbit radii and slot counts used for position calculation
+ * This is 1.6MB of clean JSON with:
+ * - 4,976 nodes with pre-calculated x/y positions
+ * - Connections as { id, orbit } pairs
+ * - Stats arrays, keystone flags, flavour text
+ * - Icon URLs pointing to cdn.poe2db.tw (webp, publicly accessible)
+ * - All 12 classes + their real ascendancies
  *
- * WHY we store this in Postgres (not just fetch from GGG API on demand):
- * - The tree JSON is 2-3MB. Fetching it on every Nexus page load would be slow.
- * - We need to query individual nodes (search, highlight by keyword).
- * - We enrich nodes with additional metadata (build popularity per node).
- * - We cache the full tree in Redis with a 1-hour TTL for The Nexus renderer.
+ * The version "4.4" corresponds to PoE2 Early Access patch series.
+ * Update this when GGG ships major tree revisions.
  */
 
-const PassiveNodeSchema = z.object({
-  skill: z.number(),
-  name: z.string().optional().default(""),
-  icon: z.string().optional(),
-  isKeystone: z.boolean().optional().default(false),
-  isNotable: z.boolean().optional().default(false),
-  isAscendancyStart: z.boolean().optional().default(false),
-  isMultipleChoice: z.boolean().optional().default(false),
-  isJewelSocket: z.boolean().optional().default(false),
-  isMastery: z.boolean().optional().default(false),
-  classStartIndex: z.number().optional(),
-  ascendancyName: z.string().optional(),
-  stats: z.array(z.string()).optional().default([]),
-  description: z.string().optional(),
-  out: z.array(z.number()).optional().default([]),
-  in: z.array(z.number()).optional().default([]),
-  group: z.number().optional(),
-  orbit: z.number().optional(),
-  orbitIndex: z.number().optional(),
-})
+// ── poe2db tree schema ─────────────────────────────────────────────────────
 
-const PassiveTreeResponseSchema = z.object({
-  nodes: z.record(z.string(), PassiveNodeSchema),
-  // Groups contain position data — we'll compute final x/y coordinates
-  groups: z.record(
-    z.string(),
-    z.object({
-      x: z.number(),
-      y: z.number(),
-      orbits: z.array(z.number()),
-      nodes: z.array(z.string()),
-    })
-  ),
-  constants: z.object({
-    orbitRadii: z.array(z.number()),
-    skillsPerOrbit: z.array(z.number()),
-  }),
-})
+type Connection = { id: string; orbit: number }
 
-// Precompute x/y from group position + orbit/orbitIndex + constants
-function computeNodePosition(
-  node: z.infer<typeof PassiveNodeSchema>,
-  group: { x: number; y: number } | undefined,
+type RawNode = {
+  skill: number
+  name?: string
+  icon?: string
+  stats?: string[]
+  flavourText?: string[]
+  group?: number
+  orbit?: number
+  orbitIndex?: number
+  out?: string[]
+  in?: string[]
+  connections?: Connection[]
+  isKeystone?: boolean
+  isNotable?: boolean
+  isJewelSocket?: boolean
+  isMastery?: boolean
+  isAscendancyStart?: boolean
+  classStartIndex?: number
+  ascendancyName?: string
+}
+
+type TreeData = {
+  nodes: Record<string, RawNode>
+  groups: Record<string, { x: number; y: number; orbits: number[]; nodes: string[] }>
   constants: { orbitRadii: number[]; skillsPerOrbit: number[] }
-): { x: number; y: number } {
-  if (!group || node.orbit === undefined || node.orbitIndex === undefined) {
-    return { x: 0, y: 0 }
-  }
-
-  const radius = constants.orbitRadii[node.orbit] ?? 0
-  const skillsInOrbit = constants.skillsPerOrbit[node.orbit] ?? 1
-  const angle = (2 * Math.PI * node.orbitIndex) / skillsInOrbit - Math.PI / 2
-
-  return {
-    x: group.x + radius * Math.cos(angle),
-    y: group.y + radius * Math.sin(angle),
-  }
+  classes: Array<{ name: string; ascendancies?: string[] }>
 }
 
+// ── Class start mapping ────────────────────────────────────────────────────
+
+// PoE2 classes by start node index (classStartIndex in tree data)
 const CLASS_STARTS: Record<number, string> = {
-  0: "Warrior",
-  1: "Ranger",
-  2: "Witch",
-  3: "Sorceress",
-  4: "Mercenary",
-  5: "Monk",
+  0:  "Warrior",
+  1:  "Ranger",
+  2:  "Witch",
+  3:  "Sorceress",
+  4:  "Mercenary",
+  5:  "Monk",
+  6:  "Huntress",
+  7:  "Druid",
 }
+
+// ── Node type resolution ───────────────────────────────────────────────────
+
+type NodeType =
+  | "normal"
+  | "notable"
+  | "keystone"
+  | "class_start"
+  | "ascendancy_start"
+  | "ascendancy_normal"
+  | "ascendancy_notable"
+  | "ascendancy_keystone"
+  | "socket"
+  | "mastery"
+  | "expansion_jewel"
+
+function resolveNodeType(node: RawNode): NodeType {
+  if (node.classStartIndex !== undefined) return "class_start"
+  if (node.isAscendancyStart) return "ascendancy_start"
+  if (node.isJewelSocket) return "socket"
+  if (node.isMastery) return "mastery"
+
+  const inAscendancy = Boolean(node.ascendancyName)
+  if (node.isKeystone) return inAscendancy ? "ascendancy_keystone" : "keystone"
+  if (node.isNotable) return inAscendancy ? "ascendancy_notable" : "notable"
+  if (inAscendancy) return "ascendancy_normal"
+  return "normal"
+}
+
+// ── Main ───────────────────────────────────────────────────────────────────
+
+const TREE_URL = "https://poe2db.tw/data/passive-skill-tree/4.4/data_us.json?1"
 
 export async function syncPassives(): Promise<void> {
-  console.log("[sync-passives] Fetching PoE2 passive tree...")
+  console.log("[sync-passives] Fetching PoE2 passive tree from poe2db...")
 
-  const res = await fetch("https://www.pathofexile.com/passive-skill-tree/passive-tree-2", {
-    headers: { "User-Agent": "LootReference/1.0 (contact@lootreference.com)" },
+  const res = await fetch(TREE_URL, {
+    headers: {
+      "User-Agent": "WraexCodex/1.0 (contact@wraexcodex.com)",
+      Accept: "application/json",
+      // Required: poe2db serves this only with a browser-like request
+      "Referer": "https://poe2db.tw/us/passive-skill-tree/",
+    },
   })
 
-  if (!res.ok) {
-    throw new Error(`Passive tree API returned ${res.status}`)
-  }
+  if (!res.ok) throw new Error(`poe2db returned ${res.status}`)
 
-  const rawData: unknown = await res.json()
-  const parsed = PassiveTreeResponseSchema.safeParse(rawData)
+  const data = await res.json() as TreeData
+  const { nodes, groups, constants } = data
 
-  if (!parsed.success) {
-    console.error("[sync-passives] Validation failed:", parsed.error.format())
-    throw new Error("Passive tree response did not match expected schema")
-  }
+  console.log(`[sync-passives] ${Object.keys(nodes).length} nodes, ${Object.keys(groups).length} groups`)
 
-  const { nodes, groups, constants } = parsed.data
+  // Build all rows first, then batch-insert
+  // WHY batch: 4976 individual awaits × ~5ms each = 25 seconds.
+  // Inserting 100 rows per statement = ~50 statements = ~3 seconds total.
+  type NodeRow = typeof passiveNodes.$inferInsert
 
-  console.log(`[sync-passives] Processing ${Object.keys(nodes).length} nodes...`)
-
-  let upsertCount = 0
+  const rows: NodeRow[] = []
+  let skipCount = 0
 
   for (const [nodeIdStr, node] of Object.entries(nodes)) {
+    if (!node.name && !node.stats?.length) { skipCount++; continue }
+
     const group = node.group !== undefined ? groups[node.group.toString()] : undefined
-    const { x, y } = computeNodePosition(node, group, constants)
+    let x = 0
+    let y = 0
 
-    // Build connections array from both outgoing and incoming edges
-    const connections = [...new Set([...node.out, ...node.in])].map(String)
+    if (group && node.orbit !== undefined && node.orbitIndex !== undefined) {
+      const radius = constants.orbitRadii[node.orbit] ?? 0
+      const skillsInOrbit = constants.skillsPerOrbit[node.orbit] ?? 1
+      const angle = (2 * Math.PI * node.orbitIndex) / skillsInOrbit - Math.PI / 2
+      x = Math.round(group.x + radius * Math.cos(angle))
+      y = Math.round(group.y + radius * Math.sin(angle))
+    }
 
-    let type: "normal" | "notable" | "keystone" | "class_start" | "ascendancy_start" | "ascendancy_normal" | "ascendancy_notable" | "ascendancy_keystone" | "socket" | "mastery" | "expansion_jewel" = "normal"
-    if (node.isKeystone) type = "keystone"
-    else if (node.isNotable) type = "notable"
-    else if (node.classStartIndex !== undefined) type = "class_start"
-    else if (node.isAscendancyStart) type = "ascendancy_start"
-    else if (node.isJewelSocket) type = "socket"
-    else if (node.isMastery) type = "mastery"
+    const connectionIds = new Set<string>()
+    for (const id of node.out ?? []) connectionIds.add(id)
+    for (const id of node.in ?? []) connectionIds.add(id)
+    for (const c of node.connections ?? []) connectionIds.add(c.id)
 
+    const type = resolveNodeType(node)
+    const classStart = node.classStartIndex !== undefined
+      ? (CLASS_STARTS[node.classStartIndex] ?? null)
+      : null
+    const description = [
+      ...(node.stats ?? []),
+      ...(node.flavourText ?? []),
+    ].join("\n") || null
+
+    rows.push({
+      nodeId: nodeIdStr,
+      name: node.name ?? "",
+      type,
+      x,
+      y,
+      orbit: node.orbit ?? null,
+      orbitIndex: node.orbitIndex ?? null,
+      group: node.group ?? null,
+      connections: [...connectionIds],
+      stats: node.stats ?? [],
+      description,
+      classStart,
+      ascendancy: node.ascendancyName ?? null,
+      isJewelSocket: node.isJewelSocket ?? false,
+      isMastery: node.isMastery ?? false,
+      iconUrl: node.icon ?? null,
+      dataVersion: "4.4",
+    })
+  }
+
+  console.log(`[sync-passives] Prepared ${rows.length} rows (${skipCount} skipped), inserting in batches...`)
+
+  const BATCH = 100
+  let upsertCount = 0
+
+  for (let i = 0; i < rows.length; i += BATCH) {
+    const batch = rows.slice(i, i + BATCH)
     await db
       .insert(passiveNodes)
-      .values({
-        nodeId: nodeIdStr,
-        name: node.name,
-        type,
-        x,
-        y,
-        orbit: node.orbit ?? null,
-        orbitIndex: node.orbitIndex ?? null,
-        group: node.group ?? null,
-        connections,
-        stats: node.stats,
-        description: node.description ?? null,
-        classStart: node.classStartIndex !== undefined ? CLASS_STARTS[node.classStartIndex] ?? null : null,
-        ascendancy: node.ascendancyName ?? null,
-        isJewelSocket: node.isJewelSocket ?? false,
-        isMastery: node.isMastery ?? false,
-        iconUrl: node.icon ?? null,
-        dataVersion: new Date().toISOString().slice(0, 10),
-      })
+      .values(batch)
       .onConflictDoUpdate({
         target: passiveNodes.nodeId,
         set: {
-          name: node.name,
-          x,
-          y,
-          connections,
-          stats: node.stats,
-          description: node.description ?? null,
-          dataVersion: new Date().toISOString().slice(0, 10),
+          name: passiveNodes.name,
+          type: passiveNodes.type,
+          x: passiveNodes.x,
+          y: passiveNodes.y,
+          connections: passiveNodes.connections,
+          stats: passiveNodes.stats,
+          description: passiveNodes.description,
+          iconUrl: passiveNodes.iconUrl,
+          dataVersion: passiveNodes.dataVersion,
+          updatedAt: new Date(),
         },
       })
-
-    upsertCount++
+    upsertCount += batch.length
   }
 
-  console.log(`[sync-passives] Done. ${upsertCount} nodes synced.`)
+  console.log(`[sync-passives] ✓ Done — ${upsertCount} nodes upserted, ${skipCount} skipped`)
 }

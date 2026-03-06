@@ -18,6 +18,7 @@
  */
 
 import { syncItems } from "./jobs/sync-items"
+import { syncIcons } from "./jobs/sync-icons"
 import { syncPrices } from "./jobs/sync-prices"
 import { syncPassives } from "./jobs/sync-passives"
 
@@ -28,6 +29,9 @@ const job = process.argv[2]
 
 if (job === "sync-items") {
   await syncItems()
+  process.exit(0)
+} else if (job === "sync-icons") {
+  await syncIcons()
   process.exit(0)
 } else if (job === "sync-prices") {
   await syncPrices()

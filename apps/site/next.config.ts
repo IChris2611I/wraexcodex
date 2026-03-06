@@ -28,10 +28,15 @@ const nextConfig: NextConfig = {
         hostname: "**.supabase.co",
         pathname: "/storage/v1/object/public/**",
       },
-      // PoE2 CDN for item icons (before we mirror them)
+      // poecdn — official GGG image CDN (icons from poe.ninja)
       {
         protocol: "https",
         hostname: "web.poecdn.com",
+      },
+      // poe2db CDN — webp item images (Art/ path structure mirrors GGG)
+      {
+        protocol: "https",
+        hostname: "cdn.poe2db.tw",
       },
     ],
     formats: ["image/avif", "image/webp"],

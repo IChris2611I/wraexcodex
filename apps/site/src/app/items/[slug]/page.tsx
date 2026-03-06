@@ -20,6 +20,7 @@
 import type { Metadata } from "next"
 import Link from "next/link"
 import { notFound } from "next/navigation"
+import Image from "next/image"
 import { db, eq } from "@wraexcodex/db"
 import { items } from "@wraexcodex/db/schema"
 
@@ -188,10 +189,11 @@ export default async function ItemDetailPage({
                 {/* Icon */}
                 {item.iconUrl ? (
                   <div className="mb-3 flex justify-center">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
+                    <Image
                       src={item.iconUrl}
                       alt={item.name}
+                      width={64}
+                      height={64}
                       className="h-16 w-16 object-contain"
                     />
                   </div>
