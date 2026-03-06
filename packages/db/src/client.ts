@@ -3,44 +3,60 @@ import postgres from "postgres"
 import * as schema from "./schema/index"
 
 /**
- * WHY a singleton pattern here:
- * In development, Next.js hot-reloads modules frequently. Without this pattern,
- * each reload creates a new DB connection, quickly exhausting the pool limit.
- * The global check ensures we reuse the same client across reloads.
+ * WHY lazy initialization (getter pattern):
+ * The db client is created on first USE, not on import.
  *
- * In production (Vercel serverless), each function invocation is isolated
- * so this runs fresh each time — which is fine because we use the pooler.
+ * WHY this matters: In a monorepo, `@wraexcodex/db` gets imported by Next.js
+ * during build/compile time — before any .env files are loaded. If we connect
+ * eagerly (at module load), it crashes with "DATABASE_URL not set" even in
+ * pages that never touch the database.
+ *
+ * WHY singleton in dev:
+ * Next.js hot-reloads modules constantly. Without the global singleton,
+ * each reload opens a new postgres connection pool → exhausts Supabase's
+ * 15-connection free tier limit within minutes.
  */
+
+type DrizzleClient = ReturnType<typeof drizzle<typeof schema>>
 
 declare global {
   // eslint-disable-next-line no-var
-  var __db: ReturnType<typeof drizzle> | undefined
+  var __db: DrizzleClient | undefined
 }
 
-function createClient() {
+function createClient(): DrizzleClient {
   const connectionString = process.env.DATABASE_URL
 
   if (!connectionString) {
-    throw new Error("DATABASE_URL environment variable is not set")
+    throw new Error(
+      "DATABASE_URL is not set. Add it to apps/site/.env.local\n" +
+      "Get it from: Supabase Dashboard → Settings → Database → Connection string (Transaction pooler)"
+    )
   }
 
   const client = postgres(connectionString, {
-    // Max connections — Supabase free tier: 15 total, reserve some for pooler
     max: 10,
-    // Idle timeout — close idle connections after 20s in serverless
     idle_timeout: 20,
-    // Connection timeout
     connect_timeout: 10,
   })
 
   return drizzle(client, { schema })
 }
 
-// Singleton in dev, fresh in prod
-export const db = globalThis.__db ?? createClient()
+// Lazy getter — connection only opens when `db` is first accessed
+let _db: DrizzleClient | undefined
 
-if (process.env.NODE_ENV !== "production") {
-  globalThis.__db = db
-}
+export const db = new Proxy({} as DrizzleClient, {
+  get(_target, prop) {
+    if (!_db) {
+      // Reuse across hot-reloads in dev
+      _db = globalThis.__db ?? createClient()
+      if (process.env.NODE_ENV !== "production") {
+        globalThis.__db = _db
+      }
+    }
+    return (_db as Record<string | symbol, unknown>)[prop]
+  },
+})
 
-export type Database = typeof db
+export type Database = DrizzleClient

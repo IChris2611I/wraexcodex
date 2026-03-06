@@ -16,18 +16,9 @@ import type { NextConfig } from "next"
 const nextConfig: NextConfig = {
   transpilePackages: ["@wraexcodex/ui", "@wraexcodex/db"],
 
-  experimental: {
-    // PPR (Partial Pre-Rendering) — Next 15's flagship feature.
-    // WHY: Static shell (navbar, footer) renders instantly from CDN.
-    // Dynamic content (prices, builds) streams in without blocking LCP.
-    // This is how we get <1s LCP on all pages.
-    ppr: "incremental",
-
-    // React compiler — automatic memoization of components.
-    // WHY: Eliminates manual useMemo/useCallback on most components.
-    // The React team built it, Next 15 ships it. Use it.
-    reactCompiler: true,
-  },
+  // NOTE: PPR and reactCompiler require Next.js canary — re-enable when we upgrade.
+  // ppr: "incremental"       → static shell + streaming dynamic content (<1s LCP)
+  // reactCompiler: true      → automatic memoization, eliminates useMemo/useCallback
 
   images: {
     // Supabase Storage for item icons and images
