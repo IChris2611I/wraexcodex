@@ -1,20 +1,11 @@
 import Navbar from "@/components/layout/Navbar";
+import Hero from "@/components/home/Hero";
 
 export default function HomePage() {
   return (
     <>
       <Navbar />
-      <main className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <h1 className="font-display text-5xl font-bold mb-4">
-            <span className="text-[#e8e0d0]">Wraex</span>
-            <span className="text-ember">Codex</span>
-          </h1>
-          <p className="text-[var(--text-muted)] text-lg">
-            The knowledge of Wraeclast, forged into data.
-          </p>
-        </div>
-      </main>
+      <Hero />
     </>
   );
 }
