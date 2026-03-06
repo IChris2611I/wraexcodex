@@ -1,0 +1,24 @@
+:root {
+  --bg-void: #050508;
+  --bg-deep: #08080f;
+  --bg-surface: #0f0f1a;
+  --bg-elevated: #161625;
+  --bg-overlay: #1e1e30;
+
+  --ember: #e67e22;
+  --gold: #f39c12;
+  --ember-glow: rgba(230, 126, 34, 0.15);
+
+  --rune: #00d4ff;
+  --rune-glow: rgba(0, 212, 255, 0.15);
+
+  --crimson: #c0392b;
+
+  --text-primary: #e8e0d0;
+  --text-muted: #7a7060;
+  --text-faint: #3d3d50;
+
+  --border-subtle: rgba(232, 224, 208, 0.06);
+  --border-ember: rgba(230, 126, 34, 0.3);
+  --border-rune: rgba(0, 212, 255, 0.3);
+}
