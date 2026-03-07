@@ -44,9 +44,9 @@ import type { PassiveNodeDTO } from "@/app/api/passives/route"
 const BG = "#000000"
 
 // Edge colors
-const EDGE_NORMAL   = "#5a4f38"   // warm dark tan — visible but not dominant
-const EDGE_HOVER    = "#8a7a50"   // slightly brighter
-const EDGE_ALLOC    = "#c8960a"   // gold for allocated paths
+const EDGE_NORMAL   = "#7a6a48"   // warm tan — clear at all zoom levels
+const EDGE_HOVER    = "#a09060"   // slightly brighter
+const EDGE_ALLOC    = "#e8a820"   // bright gold for allocated paths
 
 // Node sizes (radius in tree-space units, before zoom)
 const NODE_R: Record<string, number> = {
@@ -196,8 +196,8 @@ export function NexusCanvas({ nodes, onNodeHover, onNodeClick }: NexusCanvasProp
     const treeCx = (minX + maxX) / 2
     const treeCy = (minY + maxY) / 2
 
-    // Start at a zoom that shows ~30% of the tree — big enough to see structure
-    const zoom = Math.min(canvas.width, canvas.height) / Math.max(treeW, treeH) * 2.5
+    // Fit the whole tree in the viewport with 5% padding on each side
+    const zoom = Math.min(canvas.width / treeW, canvas.height / treeH) * 0.90
     stateRef.current.zoom    = zoom
     stateRef.current.offsetX = canvas.width  / 2 - treeCx * zoom
     stateRef.current.offsetY = canvas.height / 2 - treeCy * zoom
@@ -222,90 +222,90 @@ export function NexusCanvas({ nodes, onNodeHover, onNodeClick }: NexusCanvasProp
     ctx.fillRect(0, 0, canvas.width, canvas.height)
 
     // ── 2. Edges ──────────────────────────────────────────────────────────────
-    // Batch by color: normal edges first, then allocated, then hovered
-    ctx.lineWidth = Math.max(0.5, zoom * 0.012)
+    // Always at least 1px, scales with zoom
+    ctx.lineWidth = Math.max(1, zoom * 0.8)
 
     // Normal edges
     ctx.beginPath()
     ctx.strokeStyle = EDGE_NORMAL
     for (const [a, b] of edgeList) {
-      const aAlloc = allocated.has(a.nodeId)
-      const bAlloc = allocated.has(b.nodeId)
-      if (aAlloc && bAlloc) continue  // skip — drawn in alloc pass
+      if (allocated.has(a.nodeId) && allocated.has(b.nodeId)) continue
       ctx.moveTo(tx(a.x), ty(a.y))
       ctx.lineTo(tx(b.x), ty(b.y))
     }
     ctx.stroke()
 
-    // Allocated edges
-    ctx.beginPath()
-    ctx.strokeStyle = ALLOC_EDGE
-    ctx.lineWidth = Math.max(0.8, zoom * 0.018)
-    for (const [a, b] of edgeList) {
-      if (!allocated.has(a.nodeId) || !allocated.has(b.nodeId)) continue
-      ctx.moveTo(tx(a.x), ty(a.y))
-      ctx.lineTo(tx(b.x), ty(b.y))
+    // Allocated edges — slightly thicker, bright gold
+    if (allocated.size > 0) {
+      ctx.beginPath()
+      ctx.strokeStyle = ALLOC_EDGE
+      ctx.lineWidth = Math.max(1.5, zoom * 1.2)
+      for (const [a, b] of edgeList) {
+        if (!allocated.has(a.nodeId) || !allocated.has(b.nodeId)) continue
+        ctx.moveTo(tx(a.x), ty(a.y))
+        ctx.lineTo(tx(b.x), ty(b.y))
+      }
+      ctx.stroke()
     }
-    ctx.stroke()
 
     // ── 3. Nodes ─────────────────────────────────────────────────────────────
-    ctx.lineWidth = Math.max(0.5, zoom * 0.01)
-
     for (const node of nodes) {
       const sx = tx(node.x)
       const sy = ty(node.y)
-      const baseR = NODE_R[node.type] ?? 2.8
-      const r = baseR * zoom
+
+      // Cull off-screen nodes
+      if (sx < -60 || sx > canvas.width + 60 || sy < -60 || sy > canvas.height + 60) continue
+
+      const baseR      = NODE_R[node.type] ?? 2.8
+      // Minimum screen radius so nodes are ALWAYS visible regardless of zoom
+      const r          = Math.max(1.5, baseR * zoom)
       const isAlloc    = allocated.has(node.nodeId)
       const isHovered  = hovered?.nodeId  === node.nodeId
       const isSelected = selected?.nodeId === node.nodeId
       const isSpecial  = ["notable","keystone","class_start","ascendancy_start",
                           "ascendancy_notable","ascendancy_keystone"].includes(node.type)
-
       const dotColor  = isAlloc ? ALLOC_COLOR : (NODE_COLOR[node.type]  ?? "#9988cc")
       const haloColor = isAlloc ? ALLOC_HALO  : (HALO_COLOR[node.type] ?? null)
 
-      // Skip if off-screen (simple cull)
-      if (sx < -r*4 || sx > canvas.width + r*4 || sy < -r*4 || sy > canvas.height + r*4) continue
-
-      // 3a. Outer halo for special nodes
-      if (isSpecial && haloColor && r > 1) {
+      // 3a. Outer soft halo for special nodes (only when large enough to see)
+      if (isSpecial && haloColor && r > 3) {
+        const grad = ctx.createRadialGradient(sx, sy, r * 0.8, sx, sy, r * 3)
+        grad.addColorStop(0, haloColor + "55")
+        grad.addColorStop(1, haloColor + "00")
         ctx.beginPath()
-        ctx.arc(sx, sy, r * 2.2, 0, Math.PI * 2)
-        ctx.fillStyle = haloColor + "40"  // ~25% alpha
+        ctx.arc(sx, sy, r * 3, 0, Math.PI * 2)
+        ctx.fillStyle = grad
         ctx.fill()
       }
 
-      // 3b. Hover/selected pulse ring
+      // 3b. Hover/selected ring
       if (isHovered || isSelected) {
         ctx.beginPath()
-        ctx.arc(sx, sy, r * 2.8, 0, Math.PI * 2)
-        ctx.strokeStyle = isSelected ? "#f0a020" : "#ffffff60"
-        ctx.lineWidth = Math.max(1, zoom * 0.015)
+        ctx.arc(sx, sy, r + Math.max(2, r * 0.8), 0, Math.PI * 2)
+        ctx.strokeStyle = isSelected ? "#f0a020cc" : "#ffffff80"
+        ctx.lineWidth   = Math.max(1, r * 0.3)
         ctx.stroke()
       }
 
-      // 3c. Node background (dark fill)
+      // 3c. Dark node body
       ctx.beginPath()
       ctx.arc(sx, sy, r, 0, Math.PI * 2)
-      ctx.fillStyle = isAlloc ? "#1a0e04" : "#080612"
+      ctx.fillStyle = isAlloc ? "#180d02" : "#07050f"
       ctx.fill()
 
-      // 3d. Node border ring
+      // 3d. Colored border (the ring that gives each node its identity)
       ctx.beginPath()
       ctx.arc(sx, sy, r, 0, Math.PI * 2)
       ctx.strokeStyle = dotColor
-      ctx.lineWidth = Math.max(0.8, r * 0.35)
+      ctx.lineWidth   = Math.max(1, r * 0.4)
       ctx.stroke()
 
-      // 3e. Center dot (the "gem" — only visible when zoomed in enough)
-      if (r > 2) {
-        const dotR = r * 0.45
-        ctx.beginPath()
-        ctx.arc(sx, sy, dotR, 0, Math.PI * 2)
-        ctx.fillStyle = dotColor
-        ctx.fill()
-      }
+      // 3e. Bright center dot — always drawn, never smaller than 1px
+      const dotR = Math.max(1, r * 0.42)
+      ctx.beginPath()
+      ctx.arc(sx, sy, dotR, 0, Math.PI * 2)
+      ctx.fillStyle = dotColor
+      ctx.fill()
     }
   }, [nodes, edgeList])
 
@@ -373,12 +373,12 @@ export function NexusCanvas({ nodes, onNodeHover, onNodeClick }: NexusCanvasProp
     const mouseX = e.clientX - rect.left
     const mouseY = e.clientY - rect.top
 
-    const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12
+    const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15
     const state  = stateRef.current
     state.offsetX = mouseX - (mouseX - state.offsetX) * factor
     state.offsetY = mouseY - (mouseY - state.offsetY) * factor
     state.zoom   *= factor
-    state.zoom    = Math.max(0.05, Math.min(state.zoom, 20))
+    state.zoom    = Math.max(0.3, Math.min(state.zoom, 30))
     scheduleRender()
   }, [scheduleRender])
 
