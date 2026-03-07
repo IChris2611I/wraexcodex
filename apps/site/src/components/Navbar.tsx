@@ -23,7 +23,8 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 
 const NAV_LINKS = [
-  { label: "Codex",  href: "/items",  description: "Items, skills, bosses" },
+  { label: "Items",  href: "/items",  description: "Item database" },
+  { label: "Skills", href: "/skills", description: "Skill gem database" },
   { label: "Builds", href: "/builds", description: "Community build guides" },
   { label: "Nexus",  href: "/nexus",  description: "Interactive passive tree" },
   { label: "Oracle", href: "/oracle", description: "AI build advisor",  isAI: true },

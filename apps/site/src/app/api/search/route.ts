@@ -1,7 +1,7 @@
 /**
  * GET /api/search?q={query}&category={category}&limit={limit}
  *
- * Full-text item search powered by PostgreSQL pg_trgm.
+ * Full-text search across items + skills, powered by PostgreSQL pg_trgm.
  *
  * WHY Postgres instead of a dedicated search service:
  * - Zero extra cost — Supabase is already running
@@ -21,16 +21,17 @@
  *    similarity(name, query) — ranks "Andvarius" above "Andvaricite Ring"
  *    when query is "andvarius". Also catches typos.
  *
- * Combined query (union + order by similarity DESC):
- *   Find items where name ILIKE '%query%' OR base_type ILIKE '%query%'
- *   Order by: exact prefix match first, then similarity score descending
+ * UNION strategy — items + skills merged then re-ranked:
+ *   Both tables are queried with identical ranking logic. A UNION ALL merges
+ *   them, and an outer ORDER BY re-ranks the combined result by similarity.
+ *   WHY UNION ALL (not UNION): UNION deduplicates, which is O(n log n).
+ *   We have no duplicates across tables so UNION ALL is cheaper.
  *
  * Prerequisites (run once in Supabase SQL editor):
  *   CREATE EXTENSION IF NOT EXISTS pg_trgm;
- *   CREATE INDEX CONCURRENTLY IF NOT EXISTS items_name_trgm_idx
- *     ON items USING GIN (name gin_trgm_ops);
- *   CREATE INDEX CONCURRENTLY IF NOT EXISTS items_base_type_trgm_idx
- *     ON items USING GIN (base_type gin_trgm_ops);
+ *   CREATE INDEX IF NOT EXISTS items_name_trgm_idx ON items USING GIN (name gin_trgm_ops);
+ *   CREATE INDEX IF NOT EXISTS items_base_type_trgm_idx ON items USING GIN (base_type gin_trgm_ops);
+ *   CREATE INDEX IF NOT EXISTS skills_name_trgm_idx ON skills USING GIN (name gin_trgm_ops);
  */
 
 import { type NextRequest, NextResponse } from "next/server"
@@ -43,8 +44,8 @@ export type SearchHit = {
   slug: string
   name: string
   baseType: string | null
-  category: string
-  rarity: string
+  category: string   // "skill" for gems, otherwise item category
+  rarity: string     // "gem" for skills (matches item rarity convention)
   iconUrl: string | null
   chaosValue: number | null
 }
@@ -96,44 +97,70 @@ export async function GET(req: NextRequest) {
     const likePattern = `%${query}%`
     const prefixPattern = `${query}%`
 
-    const categoryFilter = category
-      ? sql`AND i.category = ${category}`
-      : sql``
+    // category filter — "skill" is a virtual category for the skills table
+    const filterIsSkill = category === "skill"
+    const filterIsItem  = category && category !== "skill"
 
     // WHY cast to unknown[]:
     // With postgres.js driver, db.execute() returns rows directly as an array
     // (not wrapped in { rows: [...] } like pg/node-postgres would).
     // Drizzle's generic here isn't tight enough to reflect this difference.
+    //
+    // WHY UNION ALL:
+    // Items and skills live in separate tables. We query both and merge via
+    // UNION ALL (no dedup cost), then re-rank the combined result by similarity.
+    // When ?category=skill is passed we skip items; for any other category we skip skills.
     const rows = await db.execute(sql`
-      SELECT
-        i.id,
-        i.slug,
-        i.name,
-        i.base_type   AS "baseType",
-        i.category,
-        i.rarity,
-        i.icon_url    AS "iconUrl",
-        (
-          SELECT p.chaos_value
-          FROM prices p
-          WHERE p.item_id = i.id
-          ORDER BY p.recorded_at DESC
-          LIMIT 1
-        ) AS "chaosValue",
-        GREATEST(
-          similarity(i.name, ${query}),
-          COALESCE(similarity(i.base_type, ${query}), 0)
-        ) AS similarity
-      FROM items i
-      WHERE (
-        i.name      ILIKE ${likePattern}
-        OR i.base_type ILIKE ${likePattern}
-      )
-      ${categoryFilter}
+      SELECT * FROM (
+        ${filterIsSkill ? sql`SELECT NULL::text AS id WHERE false` : sql`
+          SELECT
+            i.id,
+            i.slug,
+            i.name,
+            i.base_type        AS "baseType",
+            i.category,
+            i.rarity,
+            i.icon_url         AS "iconUrl",
+            (
+              SELECT p.chaos_value
+              FROM prices p
+              WHERE p.item_id = i.id
+              ORDER BY p.recorded_at DESC
+              LIMIT 1
+            )                  AS "chaosValue",
+            GREATEST(
+              similarity(i.name, ${query}),
+              COALESCE(similarity(i.base_type, ${query}), 0)
+            )                  AS similarity
+          FROM items i
+          WHERE (
+            i.name      ILIKE ${likePattern}
+            OR i.base_type ILIKE ${likePattern}
+          )
+          ${filterIsItem ? sql`AND i.category = ${category}` : sql``}
+        `}
+
+        ${!filterIsSkill && !filterIsItem ? sql`UNION ALL` : sql``}
+
+        ${filterIsItem ? sql`SELECT NULL::text AS id WHERE false` : sql`
+          SELECT
+            s.id,
+            s.slug,
+            s.name,
+            NULL::text         AS "baseType",
+            'skill'::text      AS category,
+            'gem'::text        AS rarity,
+            s.icon_url         AS "iconUrl",
+            NULL::numeric      AS "chaosValue",
+            similarity(s.name, ${query}) AS similarity
+          FROM skills s
+          WHERE s.name ILIKE ${likePattern}
+        `}
+      ) combined
       ORDER BY
-        (i.name ILIKE ${prefixPattern}) DESC,
-        similarity DESC,
-        i.name ASC
+        (combined.name ILIKE ${prefixPattern}) DESC,
+        combined.similarity DESC,
+        combined.name ASC
       LIMIT ${limit}
     `) as unknown as SearchHit[]
 
