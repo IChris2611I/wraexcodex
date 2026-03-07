@@ -49,6 +49,7 @@ export default function SignInPage() {
 
         {/* Clerk SignIn component — handles all auth UI */}
         <SignIn
+          fallbackRedirectUrl="/"
           appearance={{
             variables: {
               colorPrimary: "#e67e22",

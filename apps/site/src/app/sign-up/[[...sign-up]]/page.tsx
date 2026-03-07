@@ -44,6 +44,7 @@ export default function SignUpPage() {
 
         {/* Clerk SignUp component */}
         <SignUp
+          fallbackRedirectUrl="/"
           appearance={{
             variables: {
               colorPrimary: "#e67e22",
