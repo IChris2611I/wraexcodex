@@ -21,6 +21,7 @@ import { syncItems } from "./jobs/sync-items"
 import { syncIcons } from "./jobs/sync-icons"
 import { syncPrices } from "./jobs/sync-prices"
 import { syncPassives } from "./jobs/sync-passives"
+import { syncSkills } from "./jobs/sync-skills"
 
 console.log("[Jobs] Background job runner starting...")
 
@@ -38,6 +39,9 @@ if (job === "sync-items") {
   process.exit(0)
 } else if (job === "sync-passives") {
   await syncPassives()
+  process.exit(0)
+} else if (job === "sync-skills") {
+  await syncSkills()
   process.exit(0)
 } else {
   // Production mode — run all jobs on schedule

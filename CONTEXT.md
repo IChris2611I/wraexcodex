@@ -95,6 +95,11 @@ Build **Wraex Codex** — the definitive Path of Exile 2 reference platform, a f
    ```
 3. **Clerk setup** — get publishable key from dashboard.clerk.com, enable auth
 
+**Performance (do when traffic starts):**
+- Move Vercel function region to `fra1` (Frankfurt, same as Supabase) — Settings → Functions → Region
+- Add Upstash Redis to cache `/api/search` results (popular queries, 60s TTL)
+- Tune `max` connections in `packages/db/src/client.ts` based on real traffic patterns
+
 **Medium priority:**
 5. **`/builds`** — browse page for build guides (DB table exists, needs seed data + page)
 6. **The Nexus (`/nexus`)** — passive tree renderer using the 4975 nodes already in DB
