@@ -1,22 +1,19 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server"
+import { NextResponse } from "next/server"
+import type { NextRequest } from "next/server"
 
 /**
  * Next.js middleware — runs on every request at the edge before rendering.
  *
- * WHY Clerk middleware here:
- * Clerk's middleware reads the auth token from the request and makes
- * auth state available to Server Components via `auth()`. Without this,
- * every server component would need to manually verify tokens.
+ * WHY we guard with NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY check:
+ * Clerk middleware crashes with MIDDLEWARE_INVOCATION_FAILED if the publishable
+ * key is not set. During early deployment (before Clerk is configured) we want
+ * the site to work without auth. This guard makes the middleware a no-op when
+ * Clerk isn't configured, so the site is always reachable.
  *
  * WHY edge middleware (not Node.js middleware):
  * Middleware runs at the CDN edge, not in a Node.js process. Latency is
- * microseconds, not milliseconds. Auth checks are free — they don't add
- * perceptible delay to any request.
- *
- * Route matching strategy:
- * - Public routes: homepage, items, builds, skills, bosses (SEO pages)
- * - Protected routes: /dashboard, /oracle, /profile, /builds/new
- * - Clerk handles the redirect to sign-in automatically for protected routes
+ * microseconds, not milliseconds. Auth checks are free.
  */
 
 const isProtectedRoute = createRouteMatcher([
@@ -28,11 +25,19 @@ const isProtectedRoute = createRouteMatcher([
   "/settings(.*)",
 ])
 
-export default clerkMiddleware(async (auth, req) => {
+const clerkHandler = clerkMiddleware(async (auth, req) => {
   if (isProtectedRoute(req)) {
     await auth.protect()
   }
 })
+
+export default function middleware(req: NextRequest) {
+  // If Clerk is not configured, skip auth middleware entirely
+  if (!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY) {
+    return NextResponse.next()
+  }
+  return clerkHandler(req)
+}
 
 export const config = {
   matcher: [
