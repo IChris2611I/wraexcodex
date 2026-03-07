@@ -18,7 +18,8 @@ import { skills } from "@wraexcodex/db/schema"
 import { eq, sql } from "drizzle-orm"
 import { z } from "zod"
 
-const CURRENT_LEAGUE = process.env.CURRENT_LEAGUE ?? "Standard"
+// WHY "Mercenaries": current active PoE2 league. "Standard" returns PoE1 data.
+const CURRENT_LEAGUE = process.env.CURRENT_LEAGUE ?? "Mercenaries"
 
 // ── poe.ninja response schema ──────────────────────────────────────────────
 
@@ -152,11 +153,16 @@ export async function syncSkills(): Promise<void> {
           updatedAt: new Date(),
         }))
       )
+      // WHY conflict on slug (not poeId):
+      // poe.ninja gem IDs differ between leagues (Mercenaries vs Standard).
+      // Slug is our stable canonical identity — it's derived from the gem name
+      // and won't change across leagues. This makes the sync idempotent regardless
+      // of which league we're pulling from.
       .onConflictDoUpdate({
-        target: skills.poeId,
+        target: skills.slug,
         set: {
+          poeId: sql`excluded.poe_id`,
           name: sql`excluded.name`,
-          slug: sql`excluded.slug`,
           iconUrl: sql`excluded.icon_url`,
           description: sql`excluded.description`,
           isSupport: sql`excluded.is_support`,
