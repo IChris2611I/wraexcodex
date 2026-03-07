@@ -29,10 +29,10 @@ export function NexusClient() {
   const [loading,  setLoading]  = useState(true)
   const [error,    setError]    = useState<string | null>(null)
 
-  const [hoveredNode, setHoveredNode] = useState<PassiveNodeDTO | null>(null)
+  const [hoveredNode,  setHoveredNode]  = useState<PassiveNodeDTO | null>(null)
   const [selectedNode, setSelectedNode] = useState<PassiveNodeDTO | null>(null)
-  const [mousePos, setMousePos]   = useState({ x: 0, y: 0 })
-  const [allocated, setAllocated] = useState<Set<string>>(new Set())
+  const [mousePos,     setMousePos]     = useState({ x: 0, y: 0 })
+  const [allocated,    setAllocated]    = useState<Set<string>>(new Set())
 
   useEffect(() => {
     fetch("/api/passives")
@@ -42,7 +42,7 @@ export function NexusClient() {
         setAllocated(parseHashAllocated())
         setLoading(false)
       })
-      .catch(err => { setError("Failed to load passive tree."); setLoading(false) })
+      .catch(() => { setError("Failed to load passive tree."); setLoading(false) })
   }, [])
 
   useEffect(() => { if (!loading) writeHashAllocated(allocated) }, [allocated, loading])
@@ -63,24 +63,22 @@ export function NexusClient() {
   }, [])
 
   if (loading) return (
-    <div className="flex h-full w-full items-center justify-center">
-      <div className="text-center space-y-3">
-        <div style={{ fontFamily: "Cinzel, serif", fontSize: 22, color: "#e67e22" }}>The Nexus</div>
-        <div style={{ fontFamily: "Barlow, sans-serif", fontSize: 13, color: "#6b7280" }} className="animate-pulse">
-          Loading passive tree…
-        </div>
+    <div style={{ display:"flex", height:"100%", alignItems:"center", justifyContent:"center", background:"#000" }}>
+      <div style={{ textAlign:"center" }}>
+        <div style={{ fontFamily:"Cinzel,serif", fontSize:22, color:"#e67e22", marginBottom:10 }}>The Nexus</div>
+        <div style={{ fontFamily:"Barlow,sans-serif", fontSize:13, color:"#4b5563" }}>Loading passive tree…</div>
       </div>
     </div>
   )
 
   if (error) return (
-    <div className="flex h-full w-full items-center justify-center">
-      <div className="text-center">
-        <div style={{ fontFamily: "Cinzel, serif", color: "#e67e22", marginBottom: 8 }}>Failed to load</div>
-        <p style={{ color: "#6b7280", fontSize: 13 }}>{error}</p>
+    <div style={{ display:"flex", height:"100%", alignItems:"center", justifyContent:"center", background:"#000" }}>
+      <div style={{ textAlign:"center" }}>
+        <div style={{ fontFamily:"Cinzel,serif", color:"#e67e22", marginBottom:8 }}>Failed to load</div>
+        <p style={{ color:"#6b7280", fontSize:13 }}>{error}</p>
         <button onClick={() => window.location.reload()}
-          style={{ marginTop: 16, padding: "6px 16px", border: "1px solid #e67e22", color: "#e67e22",
-                   background: "transparent", cursor: "pointer", borderRadius: 4, fontFamily: "Barlow Condensed, sans-serif" }}>
+          style={{ marginTop:16, padding:"6px 16px", border:"1px solid #e67e22", color:"#e67e22",
+                   background:"transparent", cursor:"pointer", borderRadius:4 }}>
           Retry
         </button>
       </div>
@@ -88,27 +86,23 @@ export function NexusClient() {
   )
 
   return (
-    <div className="relative h-full w-full" style={{ background: "#000" }}>
+    <div style={{ position:"relative", width:"100%", height:"100%", background:"#000" }}>
       <NexusCanvas
         nodes={nodes}
-        onNodeHover={handleNodeHover}
-        onNodeClick={handleNodeClick}
+        allocated={allocated}
+        selected={selectedNode}
+        onHover={handleNodeHover}
+        onClick={handleNodeClick}
       />
-
       <NexusPanel
         selected={selectedNode}
         allocated={allocated}
         onDeselect={() => setSelectedNode(null)}
         onClearAllocated={() => { setAllocated(new Set()); setSelectedNode(null) }}
       />
-
       <NexusTooltip node={hoveredNode} mouseX={mousePos.x} mouseY={mousePos.y} />
-
-      <div style={{
-        position: "absolute", bottom: 12, right: 12,
-        fontFamily: "Barlow Condensed, sans-serif", fontSize: 11,
-        color: "#3a3550", pointerEvents: "none",
-      }}>
+      <div style={{ position:"absolute", bottom:10, right:12, pointerEvents:"none",
+                    fontFamily:"Barlow Condensed,sans-serif", fontSize:11, color:"#2e2850" }}>
         {nodes.length.toLocaleString()} nodes · scroll to zoom · drag to pan
       </div>
     </div>

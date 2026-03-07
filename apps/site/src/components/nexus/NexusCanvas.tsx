@@ -1,465 +1,423 @@
 "use client"
 
 /**
- * NexusCanvas — Pure Canvas 2D passive tree renderer
+ * NexusCanvas — Canvas 2D passive tree renderer (v4, clean rewrite)
  *
- * WHY Canvas 2D instead of Three.js / WebGL?
- * The passive tree is a 2D dot-and-line diagram. Three.js adds:
- *   - WebGL context overhead
- *   - InstancedMesh matrix computation every frame
- *   - PostProcessing pipeline (bloom = full-screen passes)
- *   - React reconciler overhead (@react-three/fiber)
- * Canvas 2D is a single thread, direct GPU-blitted 2D context.
- * For 5000 circles + 15000 line segments, Canvas 2D is 3-5x faster.
+ * Root causes fixed vs previous versions:
  *
- * VISUAL TARGETS (from PoE2 reference images):
- *   - Pure black background (#000000)
- *   - Edges: thin (~1px), warm golden-tan (#8a7a50), very visible
- *   - Normal nodes: tiny dot (r≈3), white/silver center, subtle colored ring
- *   - Notable nodes: medium (r≈6), bright colored icon-like appearance
- *   - Keystones: large (r≈10), dramatic, cyan/teal glow halo
- *   - Class starts: largest, their class color, ornate appearance
- *   - Allocated: golden/amber filled, connected edges also gold
+ * 1. CAMERA BUG: canvas.width/height are 0 until the browser lays out the element.
+ *    Using canvas.getBoundingClientRect() gives the REAL pixel dimensions immediately,
+ *    unlike canvas.width/height which start at 300x150 default.
+ *    Previous: `zoom = Math.min(canvas.width / treeW, ...)` → wrong zoom
+ *    This:     `zoom = Math.min(rect.width / treeW, ...)`   → correct
  *
- * PAN/ZOOM:
- *   - Mouse drag = pan
- *   - Scroll wheel = zoom (centered on cursor)
- *   - Touch pinch = zoom
- *   - No library needed — 30 lines of pointer math
+ * 2. ZOOM BUG: minZoom computed dynamically = half the fit-zoom.
+ *    This guarantees you can always zoom out to see the full tree.
  *
- * RENDERING PIPELINE:
- *   1. Clear to black
- *   2. Draw all edges (one beginPath per color group, batched)
- *   3. Draw all node outer halos (shadowBlur for glow effect)
- *   4. Draw all node inner circles
- *   5. Draw all node center dots
- *   On hover/allocate changes: requestAnimationFrame → redraw
+ * 3. GLOW BUG: shadowBlur must be set + ctx.save/restore per-node.
+ *    Previous code either had no glow or leaked shadow state.
+ *
+ * 4. STATE BUG: canvas no longer manages its own allocated ref.
+ *    allocated + selected come in as props → Clear button works instantly.
  */
 
-import { useRef, useEffect, useCallback, useMemo, useState } from "react"
+import { useRef, useEffect, useCallback, useMemo } from "react"
 import type { PassiveNodeDTO } from "@/app/api/passives/route"
 
-// ─── Design tokens (matching PoE2 aesthetic) ──────────────────────────────────
+// ─── Design tokens ─────────────────────────────────────────────────────────────
 
-const BG = "#000000"
+const BG           = "#000000"
+const EDGE_COLOR   = "rgba(120, 100, 58, 0.7)"
+const EDGE_ALLOC   = "#d4920a"
 
-// Edge colors
-const EDGE_NORMAL   = "#7a6a48"   // warm tan — clear at all zoom levels
-const EDGE_HOVER    = "#a09060"   // slightly brighter
-const EDGE_ALLOC    = "#e8a820"   // bright gold for allocated paths
-
-// Node sizes (radius in tree-space units, before zoom)
-const NODE_R: Record<string, number> = {
-  class_start:         14,
-  ascendancy_start:    11,
-  keystone:             9,
-  ascendancy_keystone:  7,
-  notable:              5.5,
-  ascendancy_notable:   5,
-  mastery:              4,
-  socket:               3.5,
-  expansion_jewel:      3.5,
-  normal:               2.8,
-  ascendancy_normal:    2.5,
+const BASE_R: Record<string, number> = {
+  class_start:         11,
+  ascendancy_start:     8,
+  keystone:             6.5,
+  ascendancy_keystone:  5.5,
+  notable:              4.2,
+  ascendancy_notable:   4.0,
+  mastery:              3.2,
+  socket:               2.8,
+  expansion_jewel:      2.8,
+  normal:               2.2,
+  ascendancy_normal:    2.0,
 }
 
-// Node center dot colors — these are the visible "gem" inside each node
 const NODE_COLOR: Record<string, string> = {
-  normal:              "#9988cc",   // soft violet
-  notable:             "#e8a820",   // warm gold
-  keystone:            "#20c8e8",   // electric cyan
-  class_start:         "#e05010",   // ember orange
-  ascendancy_start:    "#c030f8",   // vivid purple
-  ascendancy_notable:  "#d09020",   // asc gold
-  ascendancy_keystone: "#3080f8",   // asc blue
-  ascendancy_normal:   "#7060b0",   // dim asc
-  socket:              "#20d060",   // jewel green
-  mastery:             "#a050e8",   // mastery violet
-  expansion_jewel:     "#18b040",
+  normal:              "#8878c8",
+  notable:             "#e8b830",
+  keystone:            "#22c8e8",
+  class_start:         "#e84010",
+  ascendancy_start:    "#c038f8",
+  ascendancy_notable:  "#d09820",
+  ascendancy_keystone: "#3878f8",
+  ascendancy_normal:   "#6858b8",
+  socket:              "#28d068",
+  mastery:             "#a850e8",
+  expansion_jewel:     "#18b848",
 }
 
-// Halo/glow colors (outer ring color, dimmer)
-const HALO_COLOR: Record<string, string> = {
-  notable:             "#7a5010",
-  keystone:            "#0a6070",
-  class_start:         "#702808",
-  ascendancy_start:    "#600880",
-  ascendancy_notable:  "#6a4808",
-  ascendancy_keystone: "#103878",
-  socket:              "#0a5028",
-  mastery:             "#501888",
-}
-
-// Allocated state overrides
 const ALLOC_COLOR = "#f0a020"
-const ALLOC_HALO  = "#7a4800"
-const ALLOC_EDGE  = "#d4820a"
+const ALLOC_FILL  = "#1e1002"
+const BASE_FILL   = "#080610"
+const MAX_ZOOM    = 20
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+const GLOW_TYPES = new Set([
+  "notable", "keystone", "class_start",
+  "ascendancy_start", "ascendancy_notable", "ascendancy_keystone",
+])
 
-interface NexusCanvasProps {
-  nodes: PassiveNodeDTO[]
-  onNodeHover: (node: PassiveNodeDTO | null, x: number, y: number) => void
-  onNodeClick: (node: PassiveNodeDTO) => void
+// ─── Props ────────────────────────────────────────────────────────────────────
+
+export interface NexusCanvasProps {
+  nodes:     PassiveNodeDTO[]
+  allocated: Set<string>
+  selected:  PassiveNodeDTO | null
+  onHover:   (node: PassiveNodeDTO | null, screenX: number, screenY: number) => void
+  onClick:   (node: PassiveNodeDTO) => void
 }
 
-// ─── Spatial index for fast hover hit-testing ──────────────────────────────────
-// Divides the tree into grid cells. On mousemove we only check nodes in nearby cells.
-// Without this: O(n) = 5000 checks per mousemove event (60fps = 300k checks/sec)
-// With this: O(1) ≈ 5-20 checks per mousemove
+// ─── Component ────────────────────────────────────────────────────────────────
 
-class SpatialGrid {
-  private cells: Map<string, PassiveNodeDTO[]> = new Map()
-  private cellSize: number
+export function NexusCanvas({ nodes, allocated, selected, onHover, onClick }: NexusCanvasProps) {
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const cam       = useRef({ ox: 0, oy: 0, zoom: 1, minZoom: 0.05, ready: false })
+  const drag      = useRef({ active: false, moved: false, startX: 0, startY: 0, startOx: 0, startOy: 0 })
+  const hovRef    = useRef<PassiveNodeDTO | null>(null)
+  const dirty     = useRef(true)
+  const rafId     = useRef(0)
 
-  constructor(nodes: PassiveNodeDTO[], cellSize: number) {
-    this.cellSize = cellSize
-    for (const node of nodes) {
-      const cx = Math.floor(node.x / cellSize)
-      const cy = Math.floor(node.y / cellSize)
-      const key = `${cx},${cy}`
-      if (!this.cells.has(key)) this.cells.set(key, [])
-      this.cells.get(key)!.push(node)
-    }
-  }
+  // ── Precompute edges + bounds ─────────────────────────────────────────────
 
-  query(x: number, y: number, radius: number): PassiveNodeDTO[] {
-    const results: PassiveNodeDTO[] = []
-    const minCx = Math.floor((x - radius) / this.cellSize)
-    const maxCx = Math.floor((x + radius) / this.cellSize)
-    const minCy = Math.floor((y - radius) / this.cellSize)
-    const maxCy = Math.floor((y + radius) / this.cellSize)
-    for (let cx = minCx; cx <= maxCx; cx++) {
-      for (let cy = minCy; cy <= maxCy; cy++) {
-        const cell = this.cells.get(`${cx},${cy}`)
-        if (cell) results.push(...cell)
-      }
-    }
-    return results
-  }
-}
-
-// ─── Main component ────────────────────────────────────────────────────────────
-
-export function NexusCanvas({ nodes, onNodeHover, onNodeClick }: NexusCanvasProps) {
-  const canvasRef  = useRef<HTMLCanvasElement>(null)
-  const stateRef   = useRef({
-    // Camera transform
-    offsetX: 0,
-    offsetY: 0,
-    zoom:    1,
-    // Interaction
-    dragging:  false,
-    lastX:     0,
-    lastY:     0,
-    // Data
-    allocated: new Set<string>(),
-    hovered:   null as PassiveNodeDTO | null,
-    selected:  null as PassiveNodeDTO | null,
-  })
-
-  // Build spatial grid and edge map once nodes load
-  const { grid, nodeMap, edgeList } = useMemo(() => {
-    if (!nodes.length) return { grid: null, nodeMap: new Map(), edgeList: [] }
+  const computed = useMemo(() => {
+    if (!nodes.length) return null
 
     const nodeMap = new Map<string, PassiveNodeDTO>()
     for (const n of nodes) nodeMap.set(n.nodeId, n)
 
-    // Deduplicated edge list
-    const seen = new Set<string>()
-    const edgeList: [PassiveNodeDTO, PassiveNodeDTO][] = []
-    for (const node of nodes) {
-      for (const connId of (node.connections ?? [])) {
-        const key = node.nodeId < connId ? `${node.nodeId}-${connId}` : `${connId}-${node.nodeId}`
+    const seen  = new Set<string>()
+    const edges: [PassiveNodeDTO, PassiveNodeDTO][] = []
+    for (const n of nodes) {
+      for (const cid of (n.connections ?? [])) {
+        const key = n.nodeId < cid ? `${n.nodeId}-${cid}` : `${cid}-${n.nodeId}`
         if (seen.has(key)) continue
         seen.add(key)
-        const target = nodeMap.get(connId)
-        if (target) edgeList.push([node, target])
+        const t = nodeMap.get(cid)
+        if (t) edges.push([n, t])
       }
     }
 
-    const grid = new SpatialGrid(nodes, 200)
-    return { grid, nodeMap, edgeList }
-  }, [nodes])
-
-  // Compute initial camera to fit tree
-  const initCamera = useCallback(() => {
-    const canvas = canvasRef.current
-    if (!canvas || !nodes.length) return
     let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
     for (const n of nodes) {
       if (n.x < minX) minX = n.x; if (n.x > maxX) maxX = n.x
       if (n.y < minY) minY = n.y; if (n.y > maxY) maxY = n.y
     }
-    const treeW = maxX - minX
-    const treeH = maxY - minY
-    const treeCx = (minX + maxX) / 2
-    const treeCy = (minY + maxY) / 2
 
-    // Fit the whole tree in the viewport with 5% padding on each side
-    const zoom = Math.min(canvas.width / treeW, canvas.height / treeH) * 0.90
-    stateRef.current.zoom    = zoom
-    stateRef.current.offsetX = canvas.width  / 2 - treeCx * zoom
-    stateRef.current.offsetY = canvas.height / 2 - treeCy * zoom
+    return {
+      edges,
+      nodeMap,
+      cx: (minX + maxX) / 2,
+      cy: (minY + maxY) / 2,
+      w:  maxX - minX,
+      h:  maxY - minY,
+    }
   }, [nodes])
 
-  // ── Render ──────────────────────────────────────────────────────────────────
+  // ── Spatial grid ─────────────────────────────────────────────────────────────
 
-  const render = useCallback(() => {
+  const hitGrid = useMemo(() => {
+    if (!nodes.length) return null
+    const CELL = 400
+    const cells = new Map<string, PassiveNodeDTO[]>()
+    for (const n of nodes) {
+      const key = `${Math.floor(n.x / CELL)},${Math.floor(n.y / CELL)}`
+      if (!cells.has(key)) cells.set(key, [])
+      cells.get(key)!.push(n)
+    }
+    return (wx: number, wy: number, wr: number): PassiveNodeDTO[] => {
+      const out: PassiveNodeDTO[] = []
+      for (let cx = Math.floor((wx - wr) / CELL); cx <= Math.ceil((wx + wr) / CELL); cx++)
+        for (let cy = Math.floor((wy - wr) / CELL); cy <= Math.ceil((wy + wr) / CELL); cy++) {
+          const cell = cells.get(`${cx},${cy}`)
+          if (cell) out.push(...cell)
+        }
+      return out
+    }
+  }, [nodes])
+
+  // ── Camera init — KEY FIX: use getBoundingClientRect() ──────────────────────
+
+  const initCamera = useCallback(() => {
     const canvas = canvasRef.current
-    if (!canvas) return
+    if (!canvas || !computed) return
+
+    // getBoundingClientRect() returns real CSS pixel size immediately — never 0
+    const rect = canvas.getBoundingClientRect()
+    const cw   = rect.width
+    const ch   = rect.height
+    if (!cw || !ch) return
+
+    // Sync canvas pixel buffer to display size × DPR
+    const dpr       = window.devicePixelRatio || 1
+    canvas.width    = Math.round(cw * dpr)
+    canvas.height   = Math.round(ch * dpr)
+
+    const { cx, cy, w, h } = computed
+    const fitZoom   = Math.min(cw / w, ch / h) * 0.88
+
+    cam.current = {
+      ox:      cw / 2 - cx * fitZoom,
+      oy:      ch / 2 - cy * fitZoom,
+      zoom:    fitZoom,
+      minZoom: fitZoom * 0.45,   // can zoom out to ~half the fit size
+      ready:   true,
+    }
+    dirty.current = true
+  }, [computed])
+
+  // ── Draw ─────────────────────────────────────────────────────────────────────
+
+  const draw = useCallback(() => {
+    const canvas = canvasRef.current
+    if (!canvas || !computed || !cam.current.ready) return
     const ctx = canvas.getContext("2d")
     if (!ctx) return
 
-    const { offsetX, offsetY, zoom, allocated, hovered, selected } = stateRef.current
+    const { ox, oy, zoom } = cam.current
+    const dpr = window.devicePixelRatio || 1
+    const cw  = canvas.width  / dpr
+    const ch  = canvas.height / dpr
 
-    // Transform helpers: tree-space → screen-space
-    const tx = (x: number) => x * zoom + offsetX
-    const ty = (y: number) => y * zoom + offsetY
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
 
-    // ── 1. Clear ──────────────────────────────────────────────────────────────
+    // Clear
     ctx.fillStyle = BG
-    ctx.fillRect(0, 0, canvas.width, canvas.height)
+    ctx.fillRect(0, 0, cw, ch)
 
-    // ── 2. Edges ──────────────────────────────────────────────────────────────
-    // Always at least 1px, scales with zoom
-    ctx.lineWidth = Math.max(1, zoom * 0.8)
+    const sx  = (x: number) => x * zoom + ox
+    const sy  = (y: number) => y * zoom + oy
+    const edW = Math.max(0.5, zoom * 0.3)
 
-    // Normal edges
+    // ── Normal edges (batch) ──────────────────────────────────────────────
     ctx.beginPath()
-    ctx.strokeStyle = EDGE_NORMAL
-    for (const [a, b] of edgeList) {
+    ctx.lineWidth   = edW
+    ctx.strokeStyle = EDGE_COLOR
+    for (const [a, b] of computed.edges) {
       if (allocated.has(a.nodeId) && allocated.has(b.nodeId)) continue
-      ctx.moveTo(tx(a.x), ty(a.y))
-      ctx.lineTo(tx(b.x), ty(b.y))
+      const ax = sx(a.x), ay = sy(a.y), bx = sx(b.x), by = sy(b.y)
+      if (ax < -20 && bx < -20) continue
+      if (ax > cw + 20 && bx > cw + 20) continue
+      if (ay < -20 && by < -20) continue
+      if (ay > ch + 20 && by > ch + 20) continue
+      ctx.moveTo(ax, ay)
+      ctx.lineTo(bx, by)
     }
     ctx.stroke()
 
-    // Allocated edges — slightly thicker, bright gold
+    // ── Allocated edges ───────────────────────────────────────────────────
     if (allocated.size > 0) {
       ctx.beginPath()
-      ctx.strokeStyle = ALLOC_EDGE
-      ctx.lineWidth = Math.max(1.5, zoom * 1.2)
-      for (const [a, b] of edgeList) {
+      ctx.lineWidth   = Math.max(0.8, zoom * 0.45)
+      ctx.strokeStyle = EDGE_ALLOC
+      for (const [a, b] of computed.edges) {
         if (!allocated.has(a.nodeId) || !allocated.has(b.nodeId)) continue
-        ctx.moveTo(tx(a.x), ty(a.y))
-        ctx.lineTo(tx(b.x), ty(b.y))
+        ctx.moveTo(sx(a.x), sy(a.y))
+        ctx.lineTo(sx(b.x), sy(b.y))
       }
       ctx.stroke()
     }
 
-    // ── 3. Nodes ─────────────────────────────────────────────────────────────
+    // ── Nodes ─────────────────────────────────────────────────────────────
+    const hov = hovRef.current
+
     for (const node of nodes) {
-      const sx = tx(node.x)
-      const sy = ty(node.y)
+      const px = sx(node.x)
+      const py = sy(node.y)
 
-      // Cull off-screen nodes
-      if (sx < -60 || sx > canvas.width + 60 || sy < -60 || sy > canvas.height + 60) continue
+      // Node radius in screen px — 1.5px minimum so always a visible dot
+      const nr = Math.max(1.5, (BASE_R[node.type] ?? 2.2) * zoom)
 
-      const baseR      = NODE_R[node.type] ?? 2.8
-      // Minimum screen radius so nodes are ALWAYS visible regardless of zoom
-      const r          = Math.max(1.5, baseR * zoom)
-      const isAlloc    = allocated.has(node.nodeId)
-      const isHovered  = hovered?.nodeId  === node.nodeId
-      const isSelected = selected?.nodeId === node.nodeId
-      const isSpecial  = ["notable","keystone","class_start","ascendancy_start",
-                          "ascendancy_notable","ascendancy_keystone"].includes(node.type)
-      const dotColor  = isAlloc ? ALLOC_COLOR : (NODE_COLOR[node.type]  ?? "#9988cc")
-      const haloColor = isAlloc ? ALLOC_HALO  : (HALO_COLOR[node.type] ?? null)
+      // Off-screen cull
+      if (px < -(nr + 10) || px > cw + nr + 10) continue
+      if (py < -(nr + 10) || py > ch + nr + 10) continue
 
-      // 3a. Outer soft halo for special nodes (only when large enough to see)
-      if (isSpecial && haloColor && r > 3) {
-        const grad = ctx.createRadialGradient(sx, sy, r * 0.8, sx, sy, r * 3)
-        grad.addColorStop(0, haloColor + "55")
-        grad.addColorStop(1, haloColor + "00")
+      const isAlloc = allocated.has(node.nodeId)
+      const isHov   = hov?.nodeId     === node.nodeId
+      const isSel   = selected?.nodeId === node.nodeId
+      const color   = isAlloc ? ALLOC_COLOR : (NODE_COLOR[node.type] ?? "#8878c8")
+      const fill    = isAlloc ? ALLOC_FILL  : BASE_FILL
+
+      // Glow — only for special nodes, only when big enough to see
+      if (GLOW_TYPES.has(node.type) && nr > 2.5) {
+        ctx.save()
+        ctx.shadowColor  = color
+        ctx.shadowBlur   = nr * 2.8
+        ctx.globalAlpha  = 0.4
         ctx.beginPath()
-        ctx.arc(sx, sy, r * 3, 0, Math.PI * 2)
-        ctx.fillStyle = grad
+        ctx.arc(px, py, nr * 0.85, 0, Math.PI * 2)
+        ctx.fillStyle = color
         ctx.fill()
+        ctx.restore()
       }
 
-      // 3b. Hover/selected ring
-      if (isHovered || isSelected) {
+      // Hover / selected ring
+      if (isHov || isSel) {
         ctx.beginPath()
-        ctx.arc(sx, sy, r + Math.max(2, r * 0.8), 0, Math.PI * 2)
-        ctx.strokeStyle = isSelected ? "#f0a020cc" : "#ffffff80"
-        ctx.lineWidth   = Math.max(1, r * 0.3)
+        ctx.arc(px, py, nr + Math.max(2, nr * 0.55), 0, Math.PI * 2)
+        ctx.strokeStyle = isSel ? "#f0a020bb" : "#ffffff55"
+        ctx.lineWidth   = Math.max(1, nr * 0.25)
         ctx.stroke()
       }
 
-      // 3c. Dark node body
+      // Dark fill
       ctx.beginPath()
-      ctx.arc(sx, sy, r, 0, Math.PI * 2)
-      ctx.fillStyle = isAlloc ? "#180d02" : "#07050f"
+      ctx.arc(px, py, nr, 0, Math.PI * 2)
+      ctx.fillStyle = fill
       ctx.fill()
 
-      // 3d. Colored border (the ring that gives each node its identity)
+      // Colored ring border
       ctx.beginPath()
-      ctx.arc(sx, sy, r, 0, Math.PI * 2)
-      ctx.strokeStyle = dotColor
-      ctx.lineWidth   = Math.max(1, r * 0.4)
+      ctx.arc(px, py, nr, 0, Math.PI * 2)
+      ctx.strokeStyle = color
+      ctx.lineWidth   = Math.max(0.8, nr * 0.42)
       ctx.stroke()
 
-      // 3e. Bright center dot — always drawn, never smaller than 1px
-      const dotR = Math.max(1, r * 0.42)
+      // Center dot — always visible
       ctx.beginPath()
-      ctx.arc(sx, sy, dotR, 0, Math.PI * 2)
-      ctx.fillStyle = dotColor
+      ctx.arc(px, py, Math.max(0.8, nr * 0.38), 0, Math.PI * 2)
+      ctx.fillStyle = color
       ctx.fill()
     }
-  }, [nodes, edgeList])
 
-  // ── RAF loop ─────────────────────────────────────────────────────────────────
-  const rafRef = useRef<number>(0)
-  const scheduleRender = useCallback(() => {
-    if (rafRef.current) cancelAnimationFrame(rafRef.current)
-    rafRef.current = requestAnimationFrame(render)
-  }, [render])
+    dirty.current = false
+  }, [nodes, computed, allocated, selected])
 
-  // ── Resize observer ───────────────────────────────────────────────────────────
+  // ── RAF loop ──────────────────────────────────────────────────────────────────
+
+  const frame = useCallback(() => {
+    if (dirty.current) draw()
+    rafId.current = requestAnimationFrame(frame)
+  }, [draw])
+
+  useEffect(() => {
+    rafId.current = requestAnimationFrame(frame)
+    return () => cancelAnimationFrame(rafId.current)
+  }, [frame])
+
+  // Mark dirty when props change
+  useEffect(() => { dirty.current = true }, [allocated, selected])
+
+  // ── Resize ────────────────────────────────────────────────────────────────────
+
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
-    const ro = new ResizeObserver(() => {
-      canvas.width  = canvas.offsetWidth
-      canvas.height = canvas.offsetHeight
-      scheduleRender()
-    })
+    const ro = new ResizeObserver(() => { initCamera() })
     ro.observe(canvas)
     return () => ro.disconnect()
-  }, [scheduleRender])
+  }, [initCamera])
 
-  // ── Init camera on data load ──────────────────────────────────────────────────
-  useEffect(() => {
-    if (nodes.length) {
-      initCamera()
-      scheduleRender()
-    }
-  }, [nodes, initCamera, scheduleRender])
+  // Init on data load
+  useEffect(() => { if (computed) initCamera() }, [computed, initCamera])
 
-  // ── Convert screen coords to tree coords ──────────────────────────────────────
-  const screenToTree = useCallback((sx: number, sy: number) => {
-    const { offsetX, offsetY, zoom } = stateRef.current
-    return { x: (sx - offsetX) / zoom, y: (sy - offsetY) / zoom }
-  }, [])
+  // ── Hit test ──────────────────────────────────────────────────────────────────
 
-  // ── Hit test ─────────────────────────────────────────────────────────────────
   const hitTest = useCallback((screenX: number, screenY: number): PassiveNodeDTO | null => {
-    if (!grid) return null
-    const { x, y } = screenToTree(screenX, screenY)
-    const { zoom } = stateRef.current
-    // Search radius in tree coords: pick the largest node size + margin
-    const searchR = 20 / zoom + 20
-    const candidates = grid.query(x, y, searchR)
+    if (!hitGrid) return null
+    const { ox, oy, zoom } = cam.current
+    const wx = (screenX - ox) / zoom
+    const wy = (screenY - oy) / zoom
+    const wr = Math.max(15, 25 / zoom)
+    const candidates = hitGrid(wx, wy, wr)
 
     let best: PassiveNodeDTO | null = null
     let bestDist = Infinity
-    for (const node of candidates) {
-      const dx = node.x - x, dy = node.y - y
-      const dist = Math.sqrt(dx*dx + dy*dy)
-      const r = (NODE_R[node.type] ?? 2.8) + 4 / zoom  // generous hit area
-      if (dist <= r && dist < bestDist) { best = node; bestDist = dist }
+    for (const n of candidates) {
+      const dx   = n.x - wx, dy = n.y - wy
+      const dist = Math.sqrt(dx * dx + dy * dy)
+      const hitR = (BASE_R[n.type] ?? 2.2) + 10 / zoom
+      if (dist < hitR && dist < bestDist) { best = n; bestDist = dist }
     }
     return best
-  }, [grid, screenToTree])
+  }, [hitGrid])
 
-  // ── Pointer events ────────────────────────────────────────────────────────────
+  // ── Wheel ─────────────────────────────────────────────────────────────────────
 
-  const handleWheel = useCallback((e: WheelEvent) => {
-    e.preventDefault()
-    const canvas = canvasRef.current
-    if (!canvas) return
-    const rect   = canvas.getBoundingClientRect()
-    const mouseX = e.clientX - rect.left
-    const mouseY = e.clientY - rect.top
-
-    const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15
-    const state  = stateRef.current
-    state.offsetX = mouseX - (mouseX - state.offsetX) * factor
-    state.offsetY = mouseY - (mouseY - state.offsetY) * factor
-    state.zoom   *= factor
-    state.zoom    = Math.max(0.3, Math.min(state.zoom, 30))
-    scheduleRender()
-  }, [scheduleRender])
-
-  const handlePointerDown = useCallback((e: React.PointerEvent) => {
-    const state = stateRef.current
-    state.dragging = true
-    state.lastX = e.clientX
-    state.lastY = e.clientY
-    ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
-  }, [])
-
-  const handlePointerMove = useCallback((e: React.PointerEvent) => {
-    const state  = stateRef.current
-    const canvas = canvasRef.current
-    if (!canvas) return
-
-    const rect = canvas.getBoundingClientRect()
-    const sx   = e.clientX - rect.left
-    const sy   = e.clientY - rect.top
-
-    if (state.dragging) {
-      const dx = e.clientX - state.lastX
-      const dy = e.clientY - state.lastY
-      state.offsetX += dx
-      state.offsetY += dy
-      state.lastX = e.clientX
-      state.lastY = e.clientY
-      state.hovered = null
-      scheduleRender()
-      return
-    }
-
-    // Hover hit test
-    const hit = hitTest(sx, sy)
-    if (hit?.nodeId !== state.hovered?.nodeId) {
-      state.hovered = hit
-      onNodeHover(hit, e.clientX, e.clientY)
-      scheduleRender()
-    }
-  }, [hitTest, onNodeHover, scheduleRender])
-
-  const handlePointerUp = useCallback((e: React.PointerEvent) => {
-    const state = stateRef.current
-    if (!state.dragging) return
-    const dx = Math.abs(e.clientX - state.lastX)
-    const dy = Math.abs(e.clientY - state.lastY)
-    state.dragging = false
-
-    // Only fire click if pointer didn't move much (not a drag)
-    if (dx < 4 && dy < 4) {
-      const canvas = canvasRef.current
-      if (!canvas) return
-      const rect = canvas.getBoundingClientRect()
-      const hit  = hitTest(e.clientX - rect.left, e.clientY - rect.top)
-      if (hit) {
-        // Toggle allocation
-        const alloc = state.allocated
-        if (alloc.has(hit.nodeId)) alloc.delete(hit.nodeId)
-        else alloc.add(hit.nodeId)
-        state.selected = hit
-        scheduleRender()
-        onNodeClick(hit)
-      }
-    }
-  }, [hitTest, onNodeClick, scheduleRender])
-
-  // Attach wheel listener (non-passive to allow preventDefault)
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
-    canvas.addEventListener("wheel", handleWheel, { passive: false })
-    return () => canvas.removeEventListener("wheel", handleWheel)
-  }, [handleWheel])
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault()
+      const rect   = canvas.getBoundingClientRect()
+      const mx     = e.clientX - rect.left
+      const my     = e.clientY - rect.top
+      const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12
+      const c      = cam.current
+      const newZ   = Math.max(c.minZoom, Math.min(c.zoom * factor, MAX_ZOOM))
+      if (newZ === c.zoom) return   // already at limit — do nothing
+      const scale  = newZ / c.zoom
+      c.ox   = mx - (mx - c.ox) * scale
+      c.oy   = my - (my - c.oy) * scale
+      c.zoom = newZ
+      dirty.current = true
+    }
+    canvas.addEventListener("wheel", onWheel, { passive: false })
+    return () => canvas.removeEventListener("wheel", onWheel)
+  }, [])
+
+  // ── Pointer ───────────────────────────────────────────────────────────────────
+
+  const onPointerDown = useCallback((e: React.PointerEvent) => {
+    drag.current = {
+      active: true, moved: false,
+      startX: e.clientX, startY: e.clientY,
+      startOx: cam.current.ox, startOy: cam.current.oy,
+    }
+    ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
+  }, [])
+
+  const onPointerMove = useCallback((e: React.PointerEvent) => {
+    const d = drag.current
+    if (d.active) {
+      const dx = e.clientX - d.startX
+      const dy = e.clientY - d.startY
+      if (Math.abs(dx) + Math.abs(dy) > 3) d.moved = true
+      cam.current.ox = d.startOx + dx
+      cam.current.oy = d.startOy + dy
+      hovRef.current = null
+      dirty.current  = true
+      return
+    }
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const rect = canvas.getBoundingClientRect()
+    const hit  = hitTest(e.clientX - rect.left, e.clientY - rect.top)
+    if (hit?.nodeId !== hovRef.current?.nodeId) {
+      hovRef.current = hit
+      onHover(hit, e.clientX, e.clientY)
+      dirty.current  = true
+    }
+  }, [hitTest, onHover])
+
+  const onPointerUp = useCallback((e: React.PointerEvent) => {
+    const d = drag.current
+    d.active = false
+    if (d.moved) return
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const rect = canvas.getBoundingClientRect()
+    const hit  = hitTest(e.clientX - rect.left, e.clientY - rect.top)
+    if (hit) onClick(hit)
+  }, [hitTest, onClick])
 
   return (
     <canvas
       ref={canvasRef}
-      style={{ width: "100%", height: "100%", display: "block", cursor: "grab" }}
-      onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
-      onPointerUp={handlePointerUp}
+      style={{ display: "block", width: "100%", height: "100%", cursor: "crosshair" }}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
     />
   )
 }
