@@ -5,7 +5,5 @@
 
   "installCommand": "bun install",
   "buildCommand": "cd apps/site && bun run build",
-  "outputDirectory": "apps/site/.next",
-
-  "ignoreCommand": "git diff HEAD^ HEAD --quiet -- apps/site packages"
+  "outputDirectory": "apps/site/.next"
 }
