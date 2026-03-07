@@ -1,20 +1,31 @@
 /**
- * Middleware — intentionally minimal until Clerk is configured.
+ * Clerk middleware — protects routes and handles auth redirects.
  *
- * WHY no Clerk here yet:
- * Clerk middleware requires NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY to be set.
- * We don't have auth features built yet, so there's nothing to protect.
- * Clerk will be wired in when we build /dashboard and user accounts.
+ * WHY clerkMiddleware (not authMiddleware):
+ * clerkMiddleware is the current Clerk v5+ API. authMiddleware is deprecated.
  *
- * The matcher below still runs on every request but just passes through.
+ * Public routes: everything is public by default EXCEPT /dashboard and /builds/submit.
+ * WHY not protect more routes: SEO pages (items, skills, builds browse) must be
+ * publicly crawlable. Only user-specific actions need auth.
  */
 
-export default function middleware() {
-  // No-op — auth middleware added when Clerk is configured
-}
+import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server"
+
+const isProtectedRoute = createRouteMatcher([
+  "/dashboard(.*)",
+  "/builds/submit(.*)",
+  "/builds/edit(.*)",
+])
+
+export default clerkMiddleware(async (auth, req) => {
+  if (isProtectedRoute(req)) {
+    await auth.protect()
+  }
+})
 
 export const config = {
   matcher: [
+    // Skip Next.js internals and static files
     "/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)",
     "/(api|trpc)(.*)",
   ],
