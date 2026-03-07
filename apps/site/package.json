@@ -12,6 +12,9 @@
   },
   "dependencies": {
     "@clerk/nextjs": "^7.0.1",
+    "@react-three/drei": "^10.7.7",
+    "@react-three/fiber": "^9.5.0",
+    "@types/three": "^0.183.1",
     "@wraexcodex/config": "workspace:*",
     "@wraexcodex/db": "workspace:*",
     "@wraexcodex/ui": "workspace:*",
@@ -21,6 +24,7 @@
     "react-dom": "^19.0.0",
     "server-only": "^0.0.1",
     "svix": "^1.86.0",
+    "three": "^0.183.2",
     "zod": "^3.24.1"
   },
   "devDependencies": {
