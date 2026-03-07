@@ -34,10 +34,16 @@ function createClient(): DrizzleClient {
     )
   }
 
+  const isPooler = connectionString.includes("pooler.supabase.com")
+
   const client = postgres(connectionString, {
-    max: 10,
+    max: 1,           // serverless: 1 connection per function instance
     idle_timeout: 20,
     connect_timeout: 10,
+    // PgBouncer (Supabase pooler) doesn't support prepared statements
+    // Without this, postgres.js sends a Prepare message that the pooler rejects
+    prepare: !isPooler,
+    ssl: isPooler ? "require" : false,
   })
 
   return drizzle(client, { schema })
