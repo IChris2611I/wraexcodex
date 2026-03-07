@@ -142,6 +142,35 @@ wraexcodex/
 │           └── sync-prices.ts            ← poe.ninja → prices table (ready, not run)
 ```
 
+## Vercel Deployment
+
+### Setup (one-time)
+1. Go to vercel.com → New Project → import `IChris2611I/wraexcodex`
+2. Vercel auto-detects the `vercel.json` — no manual framework config needed
+3. Add these env vars in Vercel Dashboard → Settings → Environment Variables:
+
+| Variable | Value | Notes |
+|----------|-------|-------|
+| `DATABASE_URL` | `postgresql://postgres.rvifkvvtqkpfmttcsany:4B45BthawIUYNuep@aws-0-eu-central-1.pooler.supabase.com:6543/postgres` | **Pooler URL** (not direct) — required for serverless |
+| `NEXT_PUBLIC_APP_URL` | `https://wraexcodex.com` | or your Vercel preview URL initially |
+| `NODE_ENV` | `production` | |
+
+Clerk vars (add when Clerk is set up):
+- `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`
+- `CLERK_SECRET_KEY`
+
+### WHY pooler URL on Vercel (not direct):
+Vercel functions are serverless — each request spins up a new process.
+The direct connection (port 5432) opens a persistent pool, which would exhaust
+Supabase's connection limit (15 on free tier) instantly under any real traffic.
+The pooler (port 6543, PgBouncer) multiplexes thousands of serverless connections
+into a small pool of real DB connections. Always use pooler on Vercel.
+
+### Deploy
+```bash
+git push  # Vercel auto-deploys on every push to main
+```
+
 ## Running Locally
 
 ```bash

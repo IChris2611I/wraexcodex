@@ -54,6 +54,7 @@ export type SearchResponse = {
   query: string
   estimatedTotalHits: number
   processingTimeMs: number
+  error?: string // only present when something went wrong — for debugging
 }
 
 // ── Route handler ──────────────────────────────────────────────────────────
@@ -99,7 +100,11 @@ export async function GET(req: NextRequest) {
       ? sql`AND i.category = ${category}`
       : sql``
 
-    const rows = await db.execute<SearchHit & { similarity: number }>(sql`
+    // WHY cast to unknown[]:
+    // With postgres.js driver, db.execute() returns rows directly as an array
+    // (not wrapped in { rows: [...] } like pg/node-postgres would).
+    // Drizzle's generic here isn't tight enough to reflect this difference.
+    const rows = await db.execute(sql`
       SELECT
         i.id,
         i.slug,
@@ -116,8 +121,8 @@ export async function GET(req: NextRequest) {
           LIMIT 1
         ) AS "chaosValue",
         GREATEST(
-          similarity(i.name,      ${query}),
-          similarity(i.base_type, ${query})
+          similarity(i.name, ${query}),
+          COALESCE(similarity(i.base_type, ${query}), 0)
         ) AS similarity
       FROM items i
       WHERE (
@@ -126,24 +131,25 @@ export async function GET(req: NextRequest) {
       )
       ${categoryFilter}
       ORDER BY
-        (i.name ILIKE ${prefixPattern}) DESC,   -- prefix match floats to top
-        similarity DESC,                          -- then fuzzy rank
-        i.name ASC                                -- tiebreak alphabetically
+        (i.name ILIKE ${prefixPattern}) DESC,
+        similarity DESC,
+        i.name ASC
       LIMIT ${limit}
-    `)
+    `) as unknown as SearchHit[]
 
     const processingTimeMs = Date.now() - start
 
     return NextResponse.json<SearchResponse>({
-      hits: rows.rows as SearchHit[],
+      hits: rows,
       query,
-      estimatedTotalHits: rows.rows.length, // exact for our limit
+      estimatedTotalHits: rows.length,
       processingTimeMs,
     })
   } catch (err) {
-    console.error("[/api/search] DB error:", err)
+    // Log full error so it appears in `bun dev` terminal output
+    console.error("[/api/search] DB error:", JSON.stringify(err, null, 2))
     return NextResponse.json<SearchResponse>(
-      { hits: [], query, estimatedTotalHits: 0, processingTimeMs: 0 },
+      { hits: [], query, estimatedTotalHits: 0, processingTimeMs: 0, error: String(err) },
       { status: 200 }
     )
   }

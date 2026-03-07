@@ -2,7 +2,7 @@
   "name": "wraexcodex",
   "private": true,
   "version": "0.0.1",
-  "description": "LootReference — The definitive Path of Exile 2 reference platform",
+  "description": "Wraex Codex — The definitive Path of Exile 2 reference platform",
   "scripts": {
     "dev": "turbo dev --filter=@wraexcodex/site",
     "dev:bot": "turbo dev --filter=@wraexcodex/bot",
