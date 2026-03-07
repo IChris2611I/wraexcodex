@@ -151,7 +151,7 @@ wraexcodex/
 
 | Variable | Value | Notes |
 |----------|-------|-------|
-| `DATABASE_URL` | `postgresql://postgres.rvifkvvtqkpfmttcsany:4B45BthawIUYNuep@aws-0-eu-central-1.pooler.supabase.com:6543/postgres` | **Pooler URL** (not direct) — required for serverless |
+| `DATABASE_URL` | Session pooler URL from Supabase → Settings → Database → Connection pooling | **Session pooler** (not direct) — required for serverless/IPv4 |
 | `NEXT_PUBLIC_APP_URL` | `https://wraexcodex.com` | or your Vercel preview URL initially |
 | `NODE_ENV` | `production` | |
 
@@ -159,12 +159,10 @@ Clerk vars (add when Clerk is set up):
 - `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`
 - `CLERK_SECRET_KEY`
 
-### WHY pooler URL on Vercel (not direct):
-Vercel functions are serverless — each request spins up a new process.
-The direct connection (port 5432) opens a persistent pool, which would exhaust
-Supabase's connection limit (15 on free tier) instantly under any real traffic.
-The pooler (port 6543, PgBouncer) multiplexes thousands of serverless connections
-into a small pool of real DB connections. Always use pooler on Vercel.
+### WHY session pooler URL on Vercel (not direct):
+- Direct connection (port 5432) is IPv6-only on Supabase free tier — Vercel is IPv4
+- Session pooler is IPv4-compatible and works with postgres.js
+- Use the URL from: Supabase → Settings → Database → "Connection pooling" tab
 
 ### Deploy
 ```bash
