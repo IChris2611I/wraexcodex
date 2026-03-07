@@ -1,34 +1,17 @@
-import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server"
-import { NextResponse } from "next/server"
-import type { NextRequest } from "next/server"
-
 /**
- * WHY the NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY guard:
- * Clerk middleware crashes with MIDDLEWARE_INVOCATION_FAILED if the key is
- * missing. This lets the site run without Clerk configured (early deployment,
- * local dev without auth). Once the Clerk key is added to Vercel env vars,
- * the real middleware kicks in automatically.
+ * Middleware — intentionally minimal until Clerk is configured.
+ *
+ * WHY no Clerk here yet:
+ * Clerk middleware requires NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY to be set.
+ * We don't have auth features built yet, so there's nothing to protect.
+ * Clerk will be wired in when we build /dashboard and user accounts.
+ *
+ * The matcher below still runs on every request but just passes through.
  */
 
-const isProtectedRoute = createRouteMatcher([
-  "/dashboard(.*)",
-  "/oracle(.*)",
-  "/profile(.*)",
-  "/builds/new(.*)",
-  "/builds/edit/(.*)",
-  "/settings(.*)",
-])
-
-// Export the real Clerk middleware when key is present, otherwise a no-op
-export default process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
-  ? clerkMiddleware(async (auth, req) => {
-      if (isProtectedRoute(req)) {
-        await auth.protect()
-      }
-    })
-  : function middleware(_req: NextRequest) {
-      return NextResponse.next()
-    }
+export default function middleware() {
+  // No-op — auth middleware added when Clerk is configured
+}
 
 export const config = {
   matcher: [
