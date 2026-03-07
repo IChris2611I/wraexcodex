@@ -2,7 +2,6 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
 
   "framework": "nextjs",
-  "rootDirectory": "apps/site",
 
   "installCommand": "cd ../.. && bun install",
   "buildCommand": "cd ../.. && bun run build --filter=@wraexcodex/site",
