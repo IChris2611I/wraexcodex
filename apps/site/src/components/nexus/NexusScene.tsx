@@ -1,103 +1,85 @@
 "use client"
 
 /**
- * NexusScene — PoE2-style passive tree with bloom glow
+ * NexusScene — PoE2 passive tree renderer
  *
- * Visual architecture:
+ * Visual design philosophy (v3 — no bloom):
  *
- * BLOOM POST-PROCESSING:
- * Bloom works by blurring pixels that exceed a luminance threshold (>1.0 in
- * linear space) and adding them back to the scene. To make a node glow, set
- * its emissive color > 1.0. Background and edges stay < 1.0 so they don't bloom.
- * This is how PoE's own tree gets that ethereal glow look.
+ * Bloom post-processing is unpredictable without a calibrated render loop.
+ * Instead we get a premium look through:
+ *   1. TWO instanced meshes per node type group: outer ring + inner fill
+ *      The ring is the colored border. The fill is dark. Together they read
+ *      as the classic PoE node aesthetic.
+ *   2. SEPARATE ring meshes for notable/keystone — larger, brighter borders
+ *   3. BRIGHT, saturated colors against a near-black background
+ *      The contrast does the work that bloom was trying to fake.
+ *   4. Edge lines with 2 brightness levels: dim for normal, bright for allocated
+ *   5. Starfield points for depth — tiny, not competing with nodes
  *
- * NODE LAYERS (drawn back-to-front):
- * 1. Outer ring (InstancedMesh, torus/ring geometry) — gold/teal border
- * 2. Inner fill (InstancedMesh, circle) — dark fill so glow reads against it
- * 3. Glow core (InstancedMesh, small bright circle) — the actual bloom emitter
- *
- * EDGES:
- * Thin lines in a desaturated blue-purple. Allocated edges glow gold.
- *
- * BACKGROUND:
- * Deep space: radial gradient from near-black center to pure black edges,
- * rendered as a large plane behind everything.
+ * Draw order (back → front):
+ *   background plane → starfield → edges → node fills → node rings → node icons (text-like dots)
  */
 
 import { useRef, useMemo, useCallback, useEffect } from "react"
 import { Canvas, useThree } from "@react-three/fiber"
 import { OrbitControls } from "@react-three/drei"
-import { EffectComposer, Bloom } from "@react-three/postprocessing"
-import { BlendFunction, KernelSize } from "postprocessing"
 import * as THREE from "three"
 import type { PassiveNodeDTO } from "@/app/api/passives/route"
 
-// ─── Visual constants ──────────────────────────────────────────────────────────
-
-// Outer ring size (the visible node "body")
-const RING_OUTER: Record<string, number> = {
-  class_start:         28,
-  ascendancy_start:    22,
-  keystone:            18,
-  ascendancy_keystone: 15,
-  notable:             11,
-  ascendancy_notable:  11,
-  mastery:              9,
-  socket:               8,
-  expansion_jewel:      8,
-  normal:               6,
-  ascendancy_normal:    6,
-}
-
-// Inner fill size (slightly smaller than ring so ring shows as border)
-const FILL_RATIO = 0.72
-
-// Glow core size (the bright center that blooms)
-const CORE_RATIO = 0.35
-
-// Core colors — the visible dot at the center of each node
-const CORE_COLORS: Record<string, THREE.Color> = {
-  normal:              new THREE.Color(0.35, 0.26, 0.75),
-  notable:             new THREE.Color(0.82, 0.58, 0.08),
-  keystone:            new THREE.Color(0.08, 0.68, 0.85),
-  class_start:         new THREE.Color(0.85, 0.35, 0.06),
-  ascendancy_start:    new THREE.Color(0.62, 0.12, 0.82),
-  ascendancy_notable:  new THREE.Color(0.75, 0.50, 0.04),
-  ascendancy_keystone: new THREE.Color(0.12, 0.42, 0.82),
-  ascendancy_normal:   new THREE.Color(0.28, 0.18, 0.60),
-  socket:              new THREE.Color(0.08, 0.72, 0.32),
-  mastery:             new THREE.Color(0.52, 0.22, 0.82),
-  expansion_jewel:     new THREE.Color(0.04, 0.60, 0.24),
-}
-
-// Ring colors (outer border of each node)
-const RING_COLORS: Record<string, THREE.Color> = {
-  normal:              new THREE.Color(0.25, 0.20, 0.50),
-  notable:             new THREE.Color(0.60, 0.44, 0.08),
-  keystone:            new THREE.Color(0.05, 0.50, 0.70),
-  class_start:         new THREE.Color(0.70, 0.25, 0.04),
-  ascendancy_start:    new THREE.Color(0.50, 0.08, 0.70),
-  ascendancy_notable:  new THREE.Color(0.55, 0.38, 0.04),
-  ascendancy_keystone: new THREE.Color(0.08, 0.32, 0.70),
-  ascendancy_normal:   new THREE.Color(0.20, 0.14, 0.45),
-  socket:              new THREE.Color(0.06, 0.50, 0.22),
-  mastery:             new THREE.Color(0.38, 0.15, 0.60),
-  expansion_jewel:     new THREE.Color(0.04, 0.40, 0.16),
-}
-
-// Fill (dark center background inside ring)
-const FILL_COLOR     = new THREE.Color(0.04, 0.03, 0.09)
-const FILL_COLOR_ASC = new THREE.Color(0.06, 0.02, 0.10)
-
-// Allocated overrides
-const ALLOC_CORE  = new THREE.Color(1.0, 0.55, 0.05)   // ember orange — BLOOMS
-const ALLOC_RING  = new THREE.Color(0.65, 0.30, 0.02)
-const ALLOC_EDGE  = new THREE.Color(1.0, 0.62, 0.04)   // gold edge — BLOOMS
-
-// Edge color (NOT blooming — sub-1.0 so it stays dim)
-const EDGE_NORMAL = new THREE.Color(0.18, 0.14, 0.38)  // subtle purple
+// ─── Design tokens ─────────────────────────────────────────────────────────────
 
 const COORD_SCALE = 100
+
+// Outer radius of each node type (ring outer edge)
+const R: Record<string, number> = {
+  class_start:         20,
+  ascendancy_start:    16,
+  keystone:            13,
+  ascendancy_keystone: 11,
+  notable:              9,
+  ascendancy_notable:   9,
+  mastery:              7,
+  socket:               6,
+  expansion_jewel:      6,
+  normal:               5,
+  ascendancy_normal:    4.5,
+}
+
+// Ring border thickness as fraction of radius
+const RING_FRAC = 0.28
+
+// Node fill color (dark center) — all nodes share this, the ring color differentiates them
+const C_FILL        = new THREE.Color("#0a0816")
+const C_FILL_ASC    = new THREE.Color("#0d0618")
+const C_FILL_KS     = new THREE.Color("#030d14")
+
+// Ring / border colors per type — these are the "identity" colors
+const C_RING: Record<string, string> = {
+  normal:              "#5b4fa8",   // muted violet
+  notable:             "#c8940a",   // warm gold
+  keystone:            "#0fc4e8",   // electric cyan
+  class_start:         "#e84a0c",   // ember red-orange
+  ascendancy_start:    "#b030f0",   // vivid purple
+  ascendancy_notable:  "#d09010",   // asc gold
+  ascendancy_keystone: "#2870e8",   // asc blue
+  ascendancy_normal:   "#4838a0",   // dim asc
+  socket:              "#20c060",   // jewel green
+  mastery:             "#8840e0",   // mastery violet
+  expansion_jewel:     "#18a040",   // expansion green
+}
+
+// Allocated ring color
+const C_ALLOC_RING = "#f39c12"
+const C_ALLOC_FILL = "#1a0e04"
+const C_ALLOC_CORE = "#e67e22"
+
+// Edge colors
+const C_EDGE_NORMAL  = "#2e2850"   // dim purple-indigo
+const C_EDGE_ALLOC   = "#d4820a"   // gold
+
+// ─── Helpers ───────────────────────────────────────────────────────────────────
+
+function hex(c: string) { return new THREE.Color(c) }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -111,13 +93,15 @@ interface NexusSceneProps {
 // ─── Edge geometry ─────────────────────────────────────────────────────────────
 
 function buildEdgeGeometry(
-  nodes:     PassiveNodeDTO[],
-  nodeMap:   Map<string, PassiveNodeDTO>,
+  nodes: PassiveNodeDTO[],
+  nodeMap: Map<string, PassiveNodeDTO>,
   allocated: Set<string>
 ): THREE.BufferGeometry {
   const positions: number[] = []
-  const colors:    number[] = []
+  const colors: number[] = []
   const seen = new Set<string>()
+  const cNorm  = hex(C_EDGE_NORMAL)
+  const cAlloc = hex(C_EDGE_ALLOC)
 
   for (const node of nodes) {
     if (!node.connections?.length) continue
@@ -125,19 +109,14 @@ function buildEdgeGeometry(
       const key = node.nodeId < connId ? `${node.nodeId}-${connId}` : `${connId}-${node.nodeId}`
       if (seen.has(key)) continue
       seen.add(key)
-
       const target = nodeMap.get(connId)
       if (!target) continue
 
-      const x1 =  node.x   / COORD_SCALE
-      const y1 = -node.y   / COORD_SCALE
-      const x2 =  target.x / COORD_SCALE
-      const y2 = -target.y / COORD_SCALE
-
+      const x1 =  node.x   / COORD_SCALE, y1 = -node.y   / COORD_SCALE
+      const x2 =  target.x / COORD_SCALE, y2 = -target.y / COORD_SCALE
       positions.push(x1, y1, 0, x2, y2, 0)
 
-      const isAlloc = allocated.has(node.nodeId) && allocated.has(connId)
-      const c = isAlloc ? ALLOC_EDGE : EDGE_NORMAL
+      const c = allocated.has(node.nodeId) && allocated.has(connId) ? cAlloc : cNorm
       colors.push(c.r, c.g, c.b, c.r, c.g, c.b)
     }
   }
@@ -148,67 +127,61 @@ function buildEdgeGeometry(
   return geo
 }
 
-// ─── Single instanced layer (ring / fill / core) ───────────────────────────────
+// ─── Node layers ───────────────────────────────────────────────────────────────
+// We render two instanced meshes per node: FILL (dark center) and RING (colored border)
+// The ring is drawn as a circle at full radius; the fill is drawn on top at (1-RING_FRAC)*radius
+// This gives a clean bordered circle without needing a torus geometry.
 
-function InstanceLayer({
-  nodes,
-  allocated,
-  layer,       // "ring" | "fill" | "core"
-  meshRef,
-  onHover,
-  onClick,
+type NodeLayer = "ring" | "fill"
+
+function NodeLayer({
+  nodes, allocated, layer, zOffset,
+  meshRef, onHover, onClick,
 }: {
-  nodes:     PassiveNodeDTO[]
+  nodes: PassiveNodeDTO[]
   allocated: Set<string>
-  layer:     "ring" | "fill" | "core"
-  meshRef:   React.RefObject<THREE.InstancedMesh | null>
-  onHover?:  (node: PassiveNodeDTO | null) => void
-  onClick?:  (node: PassiveNodeDTO) => void
+  layer: NodeLayer
+  zOffset: number
+  meshRef: React.RefObject<THREE.InstancedMesh | null>
+  onHover?: (n: PassiveNodeDTO | null) => void
+  onClick?: (n: PassiveNodeDTO) => void
 }) {
   const { camera, gl } = useThree()
   const raycaster = useMemo(() => new THREE.Raycaster(), [])
   const mouse     = useMemo(() => new THREE.Vector2(), [])
-  const pos       = useMemo(() => new THREE.Vector3(), [])
-  const quat      = useMemo(() => new THREE.Quaternion(), [])
-  const scl       = useMemo(() => new THREE.Vector3(), [])
-  const mat       = useMemo(() => new THREE.Matrix4(), [])
+  const p  = useMemo(() => new THREE.Vector3(), [])
+  const q  = useMemo(() => new THREE.Quaternion(), [])
+  const s  = useMemo(() => new THREE.Vector3(), [])
+  const m  = useMemo(() => new THREE.Matrix4(), [])
 
   useEffect(() => {
     const mesh = meshRef.current
     if (!mesh) return
 
     nodes.forEach((node, i) => {
-      const outerR = RING_OUTER[node.type] ?? 6
-      let radius: number
+      const outerR = R[node.type] ?? 5
+      const radius = layer === "ring"
+        ? outerR
+        : outerR * (1 - RING_FRAC)
 
-      if (layer === "ring")  radius = outerR
-      else if (layer === "fill") radius = outerR * FILL_RATIO
-      else                   radius = outerR * CORE_RATIO
+      p.set(node.x / COORD_SCALE, -node.y / COORD_SCALE, zOffset)
+      q.identity()
+      s.set(radius, radius, 1)
+      m.compose(p, q, s)
+      mesh.setMatrixAt(i, m)
 
-      const x =  node.x / COORD_SCALE
-      const y = -node.y / COORD_SCALE
-
-      pos.set(x, y, layer === "fill" ? 0.1 : layer === "core" ? 0.2 : 0)
-      quat.identity()
-      scl.set(radius, radius, 1)
-      mat.compose(pos, quat, scl)
-      mesh.setMatrixAt(i, mat)
-
-      // Color per layer
       let color: THREE.Color
       const isAlloc = allocated.has(node.nodeId)
-      const isAsc = node.type.startsWith("ascendancy")
-
-      const fallbackRing = new THREE.Color(0.25, 0.20, 0.50)
-      const fallbackCore = new THREE.Color(0.4,  0.3,  0.9)
+      const isAsc   = node.type.startsWith("ascendancy")
 
       if (layer === "ring") {
-        color = isAlloc ? ALLOC_RING : (RING_COLORS[node.type] ?? fallbackRing)
-      } else if (layer === "fill") {
-        color = isAsc ? FILL_COLOR_ASC : FILL_COLOR
+        color = isAlloc ? hex(C_ALLOC_RING) : hex(C_RING[node.type] ?? C_RING.normal!)
       } else {
-        // core — bright, will bloom
-        color = isAlloc ? ALLOC_CORE : (CORE_COLORS[node.type] ?? fallbackCore)
+        // fill — dark center, slightly different per category
+        if (isAlloc) color = hex(C_ALLOC_FILL)
+        else if (node.type === "keystone" || node.type === "ascendancy_keystone") color = C_FILL_KS
+        else if (isAsc) color = C_FILL_ASC
+        else color = C_FILL
       }
 
       mesh.setColorAt(i, color)
@@ -216,30 +189,26 @@ function InstanceLayer({
 
     mesh.instanceMatrix.needsUpdate = true
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
-  }, [nodes, allocated, layer, meshRef, pos, quat, scl, mat])
+  }, [nodes, allocated, layer, zOffset, meshRef, p, q, s, m])
 
-  // Raycasting only on the core layer (smallest, most precise)
-  const handleMouseMove = useCallback((e: MouseEvent) => {
-    if (layer !== "core" || !onHover) return
+  // Hover — only on the ring layer (it's the outermost hit target)
+  const handleMove = useCallback((e: MouseEvent) => {
+    if (layer !== "ring" || !onHover) return
     const rect = gl.domElement.getBoundingClientRect()
     mouse.x =  ((e.clientX - rect.left) / rect.width)  * 2 - 1
     mouse.y = -((e.clientY - rect.top)  / rect.height) * 2 + 1
     raycaster.setFromCamera(mouse, camera)
-    const mesh = meshRef.current
-    if (!mesh) return
-    const hit = raycaster.intersectObject(mesh)[0]
+    const hit = raycaster.intersectObject(meshRef.current!)[0]
     onHover(hit?.instanceId != null ? (nodes[hit.instanceId] ?? null) : null)
   }, [layer, onHover, gl, mouse, camera, raycaster, meshRef, nodes])
 
   const handleClick = useCallback((e: MouseEvent) => {
-    if (layer !== "core" || !onClick) return
+    if (layer !== "ring" || !onClick) return
     const rect = gl.domElement.getBoundingClientRect()
     mouse.x =  ((e.clientX - rect.left) / rect.width)  * 2 - 1
     mouse.y = -((e.clientY - rect.top)  / rect.height) * 2 + 1
     raycaster.setFromCamera(mouse, camera)
-    const mesh = meshRef.current
-    if (!mesh) return
-    const hit = raycaster.intersectObject(mesh)[0]
+    const hit = raycaster.intersectObject(meshRef.current!)[0]
     if (hit?.instanceId != null) {
       const node = nodes[hit.instanceId]
       if (node) onClick(node)
@@ -247,100 +216,112 @@ function InstanceLayer({
   }, [layer, onClick, gl, mouse, camera, raycaster, meshRef, nodes])
 
   useEffect(() => {
-    if (layer !== "core") return
+    if (layer !== "ring") return
     const c = gl.domElement
-    c.addEventListener("mousemove", handleMouseMove)
+    c.addEventListener("mousemove", handleMove)
     c.addEventListener("click",     handleClick)
-    return () => {
-      c.removeEventListener("mousemove", handleMouseMove)
-      c.removeEventListener("click",     handleClick)
-    }
-  }, [layer, gl, handleMouseMove, handleClick])
+    return () => { c.removeEventListener("mousemove", handleMove); c.removeEventListener("click", handleClick) }
+  }, [layer, gl, handleMove, handleClick])
 
   return (
-    <instancedMesh
-      ref={meshRef}
-      args={[undefined, undefined, nodes.length]}
-      frustumCulled={false}
-    >
+    <instancedMesh ref={meshRef} args={[undefined, undefined, nodes.length]} frustumCulled={false}>
       <circleGeometry args={[1, 16]} />
-      {/*
-       * MeshStandardMaterial with emissive is needed for bloom —
-       * meshBasicMaterial is unlit and doesn't interact with tone mapping.
-       * emissiveIntensity > 1 pushes color past the bloom threshold.
-       */}
-      <meshStandardMaterial
-        vertexColors
-        emissive={layer === "core" ? new THREE.Color(1, 1, 1) : new THREE.Color(0, 0, 0)}
-        emissiveIntensity={layer === "core" ? 0.6 : 0}
-        toneMapped={false}
-      />
+      <meshBasicMaterial vertexColors />
+    </instancedMesh>
+  )
+}
+
+// ─── Notable / keystone outer glow ring (extra decorative ring) ────────────────
+// Drawn as a slightly larger, dimmer ring behind the main ring for these special types
+
+function AccentRings({ nodes, allocated }: { nodes: PassiveNodeDTO[], allocated: Set<string> }) {
+  const meshRef = useRef<THREE.InstancedMesh>(null)
+  const p = useMemo(() => new THREE.Vector3(), [])
+  const q = useMemo(() => new THREE.Quaternion(), [])
+  const s = useMemo(() => new THREE.Vector3(), [])
+  const m = useMemo(() => new THREE.Matrix4(), [])
+
+  // Only notable, keystone, class_start, ascendancy_start get accent rings
+  const accentTypes = new Set(["notable","keystone","class_start","ascendancy_start","ascendancy_notable","ascendancy_keystone"])
+  const accentNodes = useMemo(() => nodes.filter(n => accentTypes.has(n.type)), [nodes])
+
+  useEffect(() => {
+    const mesh = meshRef.current
+    if (!mesh) return
+
+    accentNodes.forEach((node, i) => {
+      const outerR = (R[node.type] ?? 9) * 1.55  // 55% larger than main ring
+      p.set(node.x / COORD_SCALE, -node.y / COORD_SCALE, -0.1)  // behind main ring
+      q.identity()
+      s.set(outerR, outerR, 1)
+      m.compose(p, q, s)
+      mesh.setMatrixAt(i, m)
+
+      const isAlloc = allocated.has(node.nodeId)
+      const baseColor = isAlloc ? hex(C_ALLOC_RING) : hex(C_RING[node.type] ?? C_RING.normal!)
+      // Dim it to ~25% brightness for a subtle outer halo
+      mesh.setColorAt(i, baseColor.clone().multiplyScalar(0.25))
+    })
+
+    mesh.instanceMatrix.needsUpdate = true
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
+  }, [accentNodes, allocated, p, q, s, m])
+
+  if (accentNodes.length === 0) return null
+
+  return (
+    <instancedMesh ref={meshRef} args={[undefined, undefined, accentNodes.length]} frustumCulled={false}>
+      <circleGeometry args={[1, 16]} />
+      <meshBasicMaterial vertexColors />
     </instancedMesh>
   )
 }
 
 // ─── Edges ─────────────────────────────────────────────────────────────────────
 
-function EdgeLines({
-  nodes, nodeMap, allocated,
-}: {
-  nodes: PassiveNodeDTO[]
-  nodeMap: Map<string, PassiveNodeDTO>
-  allocated: Set<string>
+function EdgeLines({ nodes, nodeMap, allocated }: {
+  nodes: PassiveNodeDTO[], nodeMap: Map<string, PassiveNodeDTO>, allocated: Set<string>
 }) {
-  const geometry = useMemo(
-    () => buildEdgeGeometry(nodes, nodeMap, allocated),
-    [nodes, nodeMap, allocated]
-  )
+  const geo = useMemo(() => buildEdgeGeometry(nodes, nodeMap, allocated), [nodes, nodeMap, allocated])
   return (
-    <lineSegments geometry={geometry} frustumCulled={false} renderOrder={-1}>
-      <lineBasicMaterial vertexColors toneMapped={false} />
+    <lineSegments geometry={geo} frustumCulled={false} renderOrder={-1}>
+      <lineBasicMaterial vertexColors />
     </lineSegments>
   )
 }
 
-// ─── Stars background plane ────────────────────────────────────────────────────
+// ─── Starfield ─────────────────────────────────────────────────────────────────
 
-function StarField({ bounds }: { bounds: { cx: number; cy: number; span: number } }) {
-  // Generate random star positions once
-  const geometry = useMemo(() => {
-    const count  = 2000
-    const positions = new Float32Array(count * 3)
-    const colors    = new Float32Array(count * 3)
-    const margin = bounds.span * 0.6
-
-    for (let i = 0; i < count; i++) {
-      positions[i * 3]     = bounds.cx + (Math.random() - 0.5) * bounds.span * 1.4
-      positions[i * 3 + 1] = bounds.cy + (Math.random() - 0.5) * bounds.span * 1.4
-      positions[i * 3 + 2] = -10  // behind everything
-
-      // Vary star brightness — most dim, a few bright
-      const brightness = Math.random() < 0.05 ? 0.6 + Math.random() * 0.4 : 0.1 + Math.random() * 0.2
-      // Slight blue-white tint
-      colors[i * 3]     = brightness * 0.85
-      colors[i * 3 + 1] = brightness * 0.90
-      colors[i * 3 + 2] = brightness
+function Starfield({ cx, cy, span }: { cx: number, cy: number, span: number }) {
+  const geo = useMemo(() => {
+    const N = 1800
+    const pos = new Float32Array(N * 3)
+    const col = new Float32Array(N * 3)
+    for (let i = 0; i < N; i++) {
+      pos[i*3]   = cx + (Math.random() - 0.5) * span * 1.6
+      pos[i*3+1] = cy + (Math.random() - 0.5) * span * 1.6
+      pos[i*3+2] = -50
+      const b = Math.random() < 0.04 ? 0.55 + Math.random() * 0.3 : 0.08 + Math.random() * 0.15
+      col[i*3]   = b * 0.82; col[i*3+1] = b * 0.88; col[i*3+2] = b
     }
-
-    const geo = new THREE.BufferGeometry()
-    geo.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3))
-    geo.setAttribute("color",    new THREE.Float32BufferAttribute(colors, 3))
-    return geo
-  }, [bounds])
+    const g = new THREE.BufferGeometry()
+    g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3))
+    g.setAttribute("color",    new THREE.Float32BufferAttribute(col, 3))
+    return g
+  }, [cx, cy, span])
 
   return (
-    <points geometry={geometry} frustumCulled={false}>
-      <pointsMaterial vertexColors size={0.8} sizeAttenuation={true} toneMapped={false} />
+    <points geometry={geo} frustumCulled={false}>
+      <pointsMaterial vertexColors size={1.5} sizeAttenuation={true} />
     </points>
   )
 }
 
-// ─── Inner scene ───────────────────────────────────────────────────────────────
+// ─── Scene ─────────────────────────────────────────────────────────────────────
 
 function Scene({ nodes, allocated, onNodeHover, onNodeClick }: NexusSceneProps) {
-  const ringRef  = useRef<THREE.InstancedMesh>(null)
-  const fillRef  = useRef<THREE.InstancedMesh>(null)
-  const coreRef  = useRef<THREE.InstancedMesh>(null)
+  const ringRef = useRef<THREE.InstancedMesh>(null)
+  const fillRef = useRef<THREE.InstancedMesh>(null)
 
   const nodeMap = useMemo(() => {
     const map = new Map<string, PassiveNodeDTO>()
@@ -352,39 +333,26 @@ function Scene({ nodes, allocated, onNodeHover, onNodeClick }: NexusSceneProps) 
     if (!nodes.length) return { cx: 0, cy: 0, span: 500 }
     let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
     for (const n of nodes) {
-      const x =  n.x / COORD_SCALE
-      const y = -n.y / COORD_SCALE
+      const x = n.x / COORD_SCALE, y = -n.y / COORD_SCALE
       if (x < minX) minX = x; if (x > maxX) maxX = x
       if (y < minY) minY = y; if (y > maxY) maxY = y
     }
-    return { cx: (minX + maxX) / 2, cy: (minY + maxY) / 2, span: Math.max(maxX - minX, maxY - minY) }
+    return { cx: (minX+maxX)/2, cy: (minY+maxY)/2, span: Math.max(maxX-minX, maxY-minY) }
   }, [nodes])
 
   return (
     <>
-      {/* Starfield behind everything */}
-      <StarField bounds={bounds} />
-
-      {/* Edges — drawn before nodes */}
+      <Starfield cx={bounds.cx} cy={bounds.cy} span={bounds.span} />
       <EdgeLines nodes={nodes} nodeMap={nodeMap} allocated={allocated} />
-
-      {/* Node layers — ring → fill → core (back to front) */}
-      <InstanceLayer layer="ring"  nodes={nodes} allocated={allocated} meshRef={ringRef} />
-      <InstanceLayer layer="fill"  nodes={nodes} allocated={allocated} meshRef={fillRef} />
-      <InstanceLayer layer="core"  nodes={nodes} allocated={allocated} meshRef={coreRef}
-        onHover={onNodeHover} onClick={onNodeClick}
-      />
-
-      {/* Bloom — subtle halo only around the brightest cores */}
-      <EffectComposer>
-        <Bloom
-          intensity={0.35}
-          luminanceThreshold={0.7}
-          luminanceSmoothing={0.9}
-          kernelSize={KernelSize.MEDIUM}
-          blendFunction={BlendFunction.SCREEN}
-        />
-      </EffectComposer>
+      {/* Accent halos behind rings */}
+      <AccentRings nodes={nodes} allocated={allocated} />
+      {/* Fill first (drawn on top of edges, under ring) */}
+      <NodeLayer layer="fill" nodes={nodes} allocated={allocated}
+        zOffset={0.1} meshRef={fillRef} />
+      {/* Ring on top — also handles raycasting */}
+      <NodeLayer layer="ring" nodes={nodes} allocated={allocated}
+        zOffset={0.2} meshRef={ringRef}
+        onHover={onNodeHover} onClick={onNodeClick} />
 
       <OrbitControls
         enableRotate={false}
@@ -393,66 +361,40 @@ function Scene({ nodes, allocated, onNodeHover, onNodeClick }: NexusSceneProps) 
         panSpeed={1.5}
         minZoom={0.5}
         maxZoom={60}
-        mouseButtons={{
-          LEFT:   THREE.MOUSE.PAN,
-          MIDDLE: THREE.MOUSE.DOLLY,
-          RIGHT:  THREE.MOUSE.PAN,
-        }}
+        mouseButtons={{ LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN }}
       />
     </>
   )
 }
 
-// ─── Public component ──────────────────────────────────────────────────────────
+// ─── Canvas wrapper ─────────────────────────────────────────────────────────────
 
 export function NexusScene({ nodes, allocated, onNodeHover, onNodeClick }: NexusSceneProps) {
   const bounds = useMemo(() => {
     if (!nodes.length) return { cx: 0, cy: 0, span: 500 }
     let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
     for (const n of nodes) {
-      const x =  n.x / COORD_SCALE
-      const y = -n.y / COORD_SCALE
+      const x = n.x / COORD_SCALE, y = -n.y / COORD_SCALE
       if (x < minX) minX = x; if (x > maxX) maxX = x
       if (y < minY) minY = y; if (y > maxY) maxY = y
     }
-    return { cx: (minX + maxX) / 2, cy: (minY + maxY) / 2, span: Math.max(maxX - minX, maxY - minY) }
+    return { cx: (minX+maxX)/2, cy: (minY+maxY)/2, span: Math.max(maxX-minX, maxY-minY) }
   }, [nodes])
 
   return (
     <Canvas
       orthographic
-      camera={{
-        position: [bounds.cx, bounds.cy, 500],
-        zoom: 1,
-        near: 0.1,
-        far: 5000,
-      }}
+      camera={{ position: [bounds.cx, bounds.cy, 500], zoom: 1, near: 0.1, far: 5000 }}
       style={{ width: "100%", height: "100%" }}
-      gl={{
-        antialias:      true,
-        alpha:          false,
-        toneMapping:    THREE.ACESFilmicToneMapping,
-        toneMappingExposure: 1.2,
-      }}
+      gl={{ antialias: true, alpha: false }}
       onCreated={({ camera, size }) => {
-        const ortho = camera as THREE.OrthographicCamera
-        // Start zoomed to a comfortable portion (not the whole tree at once)
-        ortho.zoom = (Math.min(size.width, size.height) / bounds.span) * 4
-        ortho.updateProjectionMatrix()
+        const o = camera as THREE.OrthographicCamera
+        o.zoom = (Math.min(size.width, size.height) / bounds.span) * 4
+        o.updateProjectionMatrix()
       }}
     >
-      {/* Deep space background */}
-      <color attach="background" args={["#02010a"]} />
-
-      {/* Scene needs a light source for MeshStandardMaterial */}
-      <ambientLight intensity={0.15} />
-
-      <Scene
-        nodes={nodes}
-        allocated={allocated}
-        onNodeHover={onNodeHover}
-        onNodeClick={onNodeClick}
-      />
+      <color attach="background" args={["#03020d"]} />
+      <Scene nodes={nodes} allocated={allocated} onNodeHover={onNodeHover} onNodeClick={onNodeClick} />
     </Canvas>
   )
 }
