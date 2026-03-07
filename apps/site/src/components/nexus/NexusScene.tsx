@@ -55,20 +55,19 @@ const FILL_RATIO = 0.72
 // Glow core size (the bright center that blooms)
 const CORE_RATIO = 0.35
 
-// Colors for glow CORES — these bloom (> 1.0 multiplied at render time)
-// Using standard 0-1 range here; we multiply in shader via toneMappingExposure
+// Core colors — the visible dot at the center of each node
 const CORE_COLORS: Record<string, THREE.Color> = {
-  normal:              new THREE.Color(0.4, 0.3, 0.9),    // soft violet
-  notable:             new THREE.Color(1.0, 0.72, 0.1),   // warm gold — BLOOMS
-  keystone:            new THREE.Color(0.1, 0.85, 1.0),   // electric cyan — BLOOMS
-  class_start:         new THREE.Color(1.0, 0.42, 0.08),  // ember — BLOOMS
-  ascendancy_start:    new THREE.Color(0.78, 0.18, 1.0),  // arcane — BLOOMS
-  ascendancy_notable:  new THREE.Color(0.95, 0.65, 0.05), // asc gold
-  ascendancy_keystone: new THREE.Color(0.15, 0.55, 1.0),  // asc blue
-  ascendancy_normal:   new THREE.Color(0.35, 0.25, 0.75), // dim asc
-  socket:              new THREE.Color(0.1, 0.9, 0.4),    // jewel green — BLOOMS
-  mastery:             new THREE.Color(0.65, 0.3, 1.0),   // mastery violet
-  expansion_jewel:     new THREE.Color(0.05, 0.75, 0.3),
+  normal:              new THREE.Color(0.35, 0.26, 0.75),
+  notable:             new THREE.Color(0.82, 0.58, 0.08),
+  keystone:            new THREE.Color(0.08, 0.68, 0.85),
+  class_start:         new THREE.Color(0.85, 0.35, 0.06),
+  ascendancy_start:    new THREE.Color(0.62, 0.12, 0.82),
+  ascendancy_notable:  new THREE.Color(0.75, 0.50, 0.04),
+  ascendancy_keystone: new THREE.Color(0.12, 0.42, 0.82),
+  ascendancy_normal:   new THREE.Color(0.28, 0.18, 0.60),
+  socket:              new THREE.Color(0.08, 0.72, 0.32),
+  mastery:             new THREE.Color(0.52, 0.22, 0.82),
+  expansion_jewel:     new THREE.Color(0.04, 0.60, 0.24),
 }
 
 // Ring colors (outer border of each node)
@@ -273,7 +272,7 @@ function InstanceLayer({
       <meshStandardMaterial
         vertexColors
         emissive={layer === "core" ? new THREE.Color(1, 1, 1) : new THREE.Color(0, 0, 0)}
-        emissiveIntensity={layer === "core" ? 2.5 : 0}
+        emissiveIntensity={layer === "core" ? 0.6 : 0}
         toneMapped={false}
       />
     </instancedMesh>
@@ -331,7 +330,7 @@ function StarField({ bounds }: { bounds: { cx: number; cy: number; span: number 
 
   return (
     <points geometry={geometry} frustumCulled={false}>
-      <pointsMaterial vertexColors size={1.2} sizeAttenuation={false} toneMapped={false} />
+      <pointsMaterial vertexColors size={0.8} sizeAttenuation={true} toneMapped={false} />
     </points>
   )
 }
@@ -376,14 +375,14 @@ function Scene({ nodes, allocated, onNodeHover, onNodeClick }: NexusSceneProps) 
         onHover={onNodeHover} onClick={onNodeClick}
       />
 
-      {/* Bloom — only pixels exceeding luminanceThreshold glow */}
+      {/* Bloom — subtle halo only around the brightest cores */}
       <EffectComposer>
         <Bloom
-          intensity={1.4}
-          luminanceThreshold={0.2}
-          luminanceSmoothing={0.6}
-          kernelSize={KernelSize.LARGE}
-          blendFunction={BlendFunction.ADD}
+          intensity={0.35}
+          luminanceThreshold={0.7}
+          luminanceSmoothing={0.9}
+          kernelSize={KernelSize.MEDIUM}
+          blendFunction={BlendFunction.SCREEN}
         />
       </EffectComposer>
 
