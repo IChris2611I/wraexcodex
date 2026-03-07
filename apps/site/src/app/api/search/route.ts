@@ -118,8 +118,8 @@ export async function GET(req: NextRequest) {
             i.slug,
             i.name,
             i.base_type        AS "baseType",
-            i.category,
-            i.rarity,
+            i.category::text   AS category,
+            i.rarity::text     AS rarity,
             i.icon_url         AS "iconUrl",
             (
               SELECT p.chaos_value
@@ -137,7 +137,7 @@ export async function GET(req: NextRequest) {
             i.name      ILIKE ${likePattern}
             OR i.base_type ILIKE ${likePattern}
           )
-          ${filterIsItem ? sql`AND i.category = ${category}` : sql``}
+          ${filterIsItem ? sql`AND i.category::text = ${category}` : sql``}
         `}
 
         ${!filterIsSkill && !filterIsItem ? sql`UNION ALL` : sql``}
