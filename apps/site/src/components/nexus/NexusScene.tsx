@@ -67,8 +67,8 @@ const COLORS = {
   allocatedKeystone:   new THREE.Color(0xf39c12),  // gold
 }
 
-const EDGE_COLOR_NORMAL    = new THREE.Color(0x4a4060)  // visible muted purple
-const EDGE_COLOR_ALLOCATED = new THREE.Color(0xe67e22)  // ember orange
+const EDGE_COLOR_NORMAL    = new THREE.Color(0x8877cc)  // bright lavender — clearly visible
+const EDGE_COLOR_ALLOCATED = new THREE.Color(0xf39c12)  // gold for allocated paths
 
 // Coordinate scale — raw poe2db coords are in thousands, divide to fit Three.js units
 const COORD_SCALE = 100
@@ -265,7 +265,8 @@ function EdgeLines({
 
   return (
     <lineSegments geometry={geometry} frustumCulled={false}>
-      <lineBasicMaterial vertexColors opacity={0.75} transparent />
+      {/* opacity:1 — no transparency needed, color is the brightness control */}
+      <lineBasicMaterial vertexColors />
     </lineSegments>
   )
 }
@@ -290,12 +291,11 @@ function Scene({ nodes, allocated, onNodeHover, onNodeClick }: NexusSceneProps) 
       />
       <OrbitControls
         enableRotate={false}
-        enableDamping
-        dampingFactor={0.1}
-        zoomSpeed={1.5}
-        panSpeed={1.2}
-        minZoom={0.3}
-        maxZoom={40}
+        enableDamping={false}   // damping adds 1-frame lag on every interaction — kills zoom feel
+        zoomSpeed={2.0}         // snappier zoom
+        panSpeed={1.5}
+        minZoom={0.5}
+        maxZoom={50}
         mouseButtons={{
           LEFT:   THREE.MOUSE.PAN,
           MIDDLE: THREE.MOUSE.DOLLY,

@@ -1,10 +1,13 @@
 /**
  * /nexus — The Nexus: 3D Passive Skill Tree
  *
- * This is a Server Component (no "use client") — it handles metadata + layout.
- * The actual Three.js canvas lives in NexusLoader (a Client Component) which
- * owns the dynamic() import with ssr:false. Next.js 15 requires ssr:false to
- * live inside a Client Component, not a Server Component.
+ * The canvas uses position:fixed to cover the full viewport below the navbar,
+ * escaping the root layout's flex column and footer.
+ *
+ * WHY position:fixed instead of a route group layout?
+ * Moving pages into a (main) route group requires file moves that are fragile
+ * with a running dev server. position:fixed is simpler, reliable, and correct
+ * for a full-screen tool page — the nexus is an app, not a document page.
  */
 
 import type { Metadata } from "next"
@@ -19,11 +22,25 @@ export const metadata: Metadata = {
 
 export default function NexusPage() {
   return (
-    <div
-      className="overflow-hidden"
-      style={{ height: "calc(100vh - 4rem)" }}
-    >
-      <NexusLoader />
-    </div>
+    <>
+      {/*
+       * Fixed overlay that covers exactly: below navbar (top-16 = 4rem) to bottom of screen.
+       * z-10 puts it above the root layout's footer but below the navbar (which is higher z).
+       * This is the correct pattern for full-screen tool pages in a shared layout.
+       */}
+      <div
+        className="fixed inset-x-0 bottom-0 z-10 overflow-hidden"
+        style={{ top: "4rem" }}
+      >
+        <NexusLoader />
+      </div>
+
+      {/*
+       * Spacer that pushes the root layout's footer off-screen.
+       * Without this the footer renders below the fixed canvas — invisible
+       * but still in the DOM and affecting scroll height.
+       */}
+      <div style={{ height: "100vh" }} aria-hidden="true" />
+    </>
   )
 }
