@@ -60,14 +60,23 @@ Build **Wraex Codex** — the definitive Path of Exile 2 reference platform, a f
 - **`sync-items`**: 2550 items from GGG Trade API, three-level slug collision resolution, 0 errors
 - **`sync-icons`**: 97% icon coverage (2481/2550) — poe.ninja for uniques/currency/gems, poe2db scraper for base types
 - **`sync-passives`**: 4975 passive nodes from poe2db, batch insert (100/statement)
-- **`sync-prices`**: structure ready, needs a first run to populate `prices` table
+- **`sync-prices`**: structure complete — **run `bun run src/index.ts sync-prices` in apps/jobs** to populate prices table (UniqueWeapon, UniqueArmour, UniqueAccessory, UniqueFlask, UniqueJewel, DivinationCard)
+
 
 ### Site (`apps/site`)
 - Homepage v2: hero, stats strip, feature cards, "Not Another Wiki", Discord CTA
 - Navbar: sticky, scroll-aware, mobile overlay
 - Footer, CommandPalette (⌘K), PageTransition
-- **`/items`**: browse page with category/rarity filters, 48/page grid, smart pagination, ISR 6h
-- **`/items/[slug]`**: detail page with in-game tooltip aesthetic, rarity borders, trade link, ISR
+- **`/items`**: browse page with category/rarity filters, 48/page grid, smart pagination, ISR 6h. Chaos price badge shown on cards via inline SQL subquery (single query, no N+1)
+- **`/api/search`**: Postgres pg_trgm full-text search — `ILIKE '%q%'` on name + base_type, ranked by `similarity()` descending. No external service. Accepts `?q=`, `?category=`, `?limit=`.
+- **`CommandPalette`**: fully wired to /api/search. Debounced 300ms, keyboard nav (↑↓ Enter), result rows with icon + client-side highlighted name + chaos price badge + category badge. Falls back to quick links when query empty.
+- **Search prerequisites (one-time, run in Supabase SQL Editor)**:
+  ```sql
+  CREATE EXTENSION IF NOT EXISTS pg_trgm;
+  CREATE INDEX CONCURRENTLY IF NOT EXISTS items_name_trgm_idx ON items USING GIN (name gin_trgm_ops);
+  CREATE INDEX CONCURRENTLY IF NOT EXISTS items_base_type_trgm_idx ON items USING GIN (base_type gin_trgm_ops);
+  ```
+- **`/items/[slug]`**: detail page with in-game tooltip aesthetic, rarity borders, trade link, ISR. **Full price panel**: chaos + divine values, 24h trend %, 7-day SVG sparkline, listing count, poe.ninja attribution. All rendered as Server Component (zero client JS)
 - `/api/icon`: proxy route for poe2db images (adds Referer header)
 - `src/lib/item-icon.ts`: `resolveIconUrl()` helper — routes poe2db URLs through proxy
 
@@ -77,10 +86,14 @@ Build **Wraex Codex** — the definitive Path of Exile 2 reference platform, a f
 ## What's Next ❌
 
 **High priority (next session):**
-1. **Run `sync-prices`** — populate the prices table, add price display to item detail page
-2. **`/items/[slug]` enrichment** — show explicit mods, flavour text (already in DB from sync-icons), link to trade
+1. **Run `sync-prices`** — run: `cd apps/jobs && bun run src/index.ts sync-prices`
+2. **Enable pg_trgm indexes** — run in Supabase SQL Editor (one-time):
+   ```sql
+   CREATE EXTENSION IF NOT EXISTS pg_trgm;
+   CREATE INDEX CONCURRENTLY IF NOT EXISTS items_name_trgm_idx ON items USING GIN (name gin_trgm_ops);
+   CREATE INDEX CONCURRENTLY IF NOT EXISTS items_base_type_trgm_idx ON items USING GIN (base_type gin_trgm_ops);
+   ```
 3. **Clerk setup** — get publishable key from dashboard.clerk.com, enable auth
-4. **Meilisearch** — index items for instant search, wire up CommandPalette
 
 **Medium priority:**
 5. **`/builds`** — browse page for build guides (DB table exists, needs seed data + page)
@@ -155,6 +168,9 @@ cd apps/jobs && bun run tsc --noEmit
 ## Git Log (recent)
 
 ```
+(pending) feat: search — Postgres pg_trgm /api/search + CommandPalette live results
+(pending) feat: live prices — chaos badges on browse, full price panel on detail
+75e572f fix: broken images + codebase cleanup
 707a5db feat: sync-icons + sync-passives (97% icon coverage)
 0d0ead0 feat: item sync + browse/detail pages
 931b6c2 feat: site shell — Navbar, Footer, CommandPalette, Homepage v2

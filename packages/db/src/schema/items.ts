@@ -41,7 +41,7 @@ export const itemCategoryEnum = pgEnum("item_category", [
  * - `stats` as JSONB — item stats vary wildly by type, rigid columns would break
  * - `implicits`/`explicits` as JSONB arrays — matches PoE2 API structure exactly
  * - Separate `lore_text` column for the AI Lore Companion to query efficiently
- * - `search_vector` will be a tsvector for full-text search fallback (Meilisearch is primary)
+   * - Search uses pg_trgm trigram GIN indexes on name + base_type (see Supabase migration notes)
  */
 export const items = pgTable(
   "items",
@@ -98,7 +98,7 @@ export const items = pgTable(
     // - slug: every item page load hits this — must be instant
     // - category + rarity: browse/filter pages query this constantly
     // - poeId: sync jobs update by poeId — needs to be fast
-    // - name: search fallback if Meilisearch is unavailable
+    // - name: full-text search via pg_trgm (trigram GIN index created in Supabase migration)
     index("items_slug_idx").on(table.slug),
     index("items_category_rarity_idx").on(table.category, table.rarity),
     index("items_poe_id_idx").on(table.poeId),

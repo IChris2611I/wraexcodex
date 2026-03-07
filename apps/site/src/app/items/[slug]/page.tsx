@@ -21,8 +21,9 @@ import type { Metadata } from "next"
 import Link from "next/link"
 import { notFound } from "next/navigation"
 import Image from "next/image"
-import { db, eq } from "@wraexcodex/db"
-import { items } from "@wraexcodex/db/schema"
+import { db, eq, desc } from "@wraexcodex/db"
+import { items, prices } from "@wraexcodex/db/schema"
+import type { PricePoint } from "@wraexcodex/db"
 import { resolveIconUrl } from "@/lib/item-icon"
 
 export const revalidate = 21600
@@ -79,6 +80,19 @@ async function getItem(slug: string) {
     .where(eq(items.slug, slug))
     .limit(1)
   return item ?? null
+}
+
+// WHY we query by itemId without specifying league:
+// We take the most recently recorded price (any league) — this surfaces the
+// "live" price. In a future multi-league UI we'd add a league selector.
+async function getPrice(itemId: string) {
+  const [price] = await db
+    .select()
+    .from(prices)
+    .where(eq(prices.itemId, itemId))
+    .orderBy(desc(prices.recordedAt))
+    .limit(1)
+  return price ?? null
 }
 
 // ── Constants ──────────────────────────────────────────────────────────────
@@ -148,6 +162,9 @@ export default async function ItemDetailPage({
   const item = await getItem(slug)
 
   if (!item) notFound()
+
+  // Fetch price in parallel — won't exist for all items (only synced types)
+  const price = await getPrice(item.id)
 
   const styles: RarityStyle = (RARITY_STYLES as Record<string, RarityStyle>)[item.rarity] ?? RARITY_STYLES.normal
   const categoryLabel = CATEGORY_LABELS[item.category] ?? item.category
@@ -328,24 +345,8 @@ export default async function ItemDetailPage({
               </div>
             )}
 
-            {/* Price placeholder — will be populated by poe.ninja sync */}
-            <div className="rounded-sm border border-border-subtle bg-forge-900/60 p-5">
-              <h2 className="mb-1 font-display text-base font-bold text-parchment">
-                Market Price
-              </h2>
-              <p className="font-body text-xs text-parchment-muted">
-                Live poe.ninja prices coming in Week 2. For now, check{" "}
-                <a
-                  href={`https://poe.ninja/economy/poe2/standard`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-ember hover:text-ember-light underline underline-offset-2"
-                >
-                  poe.ninja
-                </a>
-                {" "}directly.
-              </p>
-            </div>
+            {/* Market Price */}
+            <PricePanel price={price} itemName={item.name} />
 
             {/* Drop areas (if populated) */}
             {item.dropAreas && item.dropAreas.length > 0 && (
@@ -368,6 +369,222 @@ export default async function ItemDetailPage({
       </div>
     </div>
   )
+}
+
+// ── Price Panel ────────────────────────────────────────────────────────────
+//
+// WHY we use an SVG sparkline rendered server-side:
+// No client JS needed — the 7-point sparkline is pure SVG math.
+// This keeps the page as a pure Server Component with zero hydration cost.
+
+type PricePanelProps = {
+  price: {
+    chaosValue: number
+    divineValue: number | null
+    listingCount: number | null
+    trendDirection: "rising" | "falling" | "stable" | null
+    trendPercent: number | null
+    priceHistory7d: PricePoint[] | null
+    league: string
+    recordedAt: Date
+  } | null
+  itemName: string
+}
+
+function PricePanel({ price, itemName }: PricePanelProps) {
+  if (!price) {
+    return (
+      <div className="rounded-sm border border-border-subtle bg-forge-900/60 p-5">
+        <h2 className="mb-1 font-display text-base font-bold text-parchment">Market Price</h2>
+        <p className="font-body text-xs text-parchment-muted">
+          No price data available. Check{" "}
+          <a
+            href={`https://poe.ninja/economy/poe2/standard?search=${encodeURIComponent(itemName)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-ember hover:text-ember-light underline underline-offset-2"
+          >
+            poe.ninja
+          </a>{" "}
+          directly.
+        </p>
+      </div>
+    )
+  }
+
+  const trendColor =
+    price.trendDirection === "rising"
+      ? "text-green-400"
+      : price.trendDirection === "falling"
+        ? "text-red-400"
+        : "text-parchment-muted"
+
+  const trendIcon =
+    price.trendDirection === "rising" ? "↑" : price.trendDirection === "falling" ? "↓" : "→"
+
+  const history = (price.priceHistory7d ?? []).filter((p) => p.chaosValue != null)
+  const ago = formatTimeAgo(new Date(price.recordedAt))
+
+  return (
+    <div className="rounded-sm border border-border-subtle bg-forge-900/60 p-5">
+      <div className="mb-4 flex items-start justify-between gap-4">
+        <div>
+          <h2 className="font-display text-base font-bold text-parchment">Market Price</h2>
+          <p className="mt-0.5 font-ui text-[10px] uppercase tracking-wider text-parchment-muted opacity-60">
+            {price.league} league · updated {ago}
+          </p>
+        </div>
+        {price.listingCount != null && (
+          <span className="rounded-sm border border-border-subtle bg-forge-800/60 px-2 py-1 font-ui text-[10px] text-parchment-muted">
+            {price.listingCount} listings
+          </span>
+        )}
+      </div>
+
+      {/* Main price display */}
+      <div className="flex flex-wrap items-end gap-6">
+        {/* Chaos value */}
+        <div>
+          <p className="font-ui text-[10px] uppercase tracking-wider text-parchment-muted opacity-60 mb-1">
+            Chaos Orbs
+          </p>
+          <div className="flex items-center gap-2">
+            {/* Chaos orb icon — inline SVG approximation */}
+            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-[#1a0a1a] border border-[#8b2252] text-[10px]">
+              ✦
+            </span>
+            <span className="font-display text-2xl font-bold text-parchment">
+              {price.chaosValue.toFixed(price.chaosValue >= 10 ? 0 : 1)}
+            </span>
+          </div>
+        </div>
+
+        {/* Divine value */}
+        {price.divineValue != null && price.divineValue > 0.01 && (
+          <div>
+            <p className="font-ui text-[10px] uppercase tracking-wider text-parchment-muted opacity-60 mb-1">
+              Divine Orbs
+            </p>
+            <div className="flex items-center gap-2">
+              <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-[#0a0a1a] border border-[#7d6a47] text-[10px]">
+                ✧
+              </span>
+              <span className="font-display text-2xl font-bold text-[#aa9e82]">
+                {price.divineValue.toFixed(2)}
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* Trend indicator */}
+        {price.trendPercent != null && Math.abs(price.trendPercent) > 0.5 && (
+          <div className="ml-auto text-right">
+            <p className="font-ui text-[10px] uppercase tracking-wider text-parchment-muted opacity-60 mb-1">
+              24h Change
+            </p>
+            <span className={`font-ui text-sm font-semibold ${trendColor}`}>
+              {trendIcon} {Math.abs(price.trendPercent).toFixed(1)}%
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* 7-day sparkline */}
+      {history.length >= 3 && <Sparkline data={history} trendDirection={price.trendDirection} />}
+
+      {/* Attribution */}
+      <p className="mt-3 font-body text-[10px] text-parchment-muted opacity-40">
+        Price data from{" "}
+        <a
+          href="https://poe.ninja"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline underline-offset-2 hover:opacity-70"
+        >
+          poe.ninja
+        </a>
+      </p>
+    </div>
+  )
+}
+
+// ── Sparkline SVG ──────────────────────────────────────────────────────────
+//
+// Pure SVG — zero JS, zero hydration.
+// We normalise the 7-day chaos values to fit a 200×40 viewBox.
+
+function Sparkline({
+  data,
+  trendDirection,
+}: {
+  data: PricePoint[]
+  trendDirection: "rising" | "falling" | "stable" | null
+}) {
+  const WIDTH = 200
+  const HEIGHT = 36
+  const PAD = 2
+
+  const values = data.map((p) => p.chaosValue)
+  const min = Math.min(...values)
+  const max = Math.max(...values)
+  const range = max - min || 1 // avoid divide-by-zero for flat lines
+
+  const points = values.map((v, i) => {
+    const x = PAD + (i / (values.length - 1)) * (WIDTH - PAD * 2)
+    const y = PAD + (1 - (v - min) / range) * (HEIGHT - PAD * 2)
+    return `${x.toFixed(1)},${y.toFixed(1)}`
+  })
+
+  const strokeColor =
+    trendDirection === "rising"
+      ? "#4ade80"
+      : trendDirection === "falling"
+        ? "#f87171"
+        : "#6b7280"
+
+  return (
+    <div className="mt-4">
+      <p className="mb-1 font-ui text-[10px] uppercase tracking-wider text-parchment-muted opacity-60">
+        7-day trend
+      </p>
+      <svg
+        viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
+        className="w-full max-w-[200px] h-9 overflow-visible"
+        aria-hidden
+      >
+        <polyline
+          points={points.join(" ")}
+          fill="none"
+          stroke={strokeColor}
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          opacity="0.8"
+        />
+        {/* Last point dot */}
+        {points.length > 0 && (
+          <circle
+            cx={points[points.length - 1]!.split(",")[0]}
+            cy={points[points.length - 1]!.split(",")[1]}
+            r="2"
+            fill={strokeColor}
+          />
+        )}
+      </svg>
+    </div>
+  )
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+
+function formatTimeAgo(date: Date): string {
+  const diffMs = Date.now() - date.getTime()
+  const diffMins = Math.floor(diffMs / 60000)
+  if (diffMins < 1) return "just now"
+  if (diffMins < 60) return `${diffMins}m ago`
+  const diffHrs = Math.floor(diffMins / 60)
+  if (diffHrs < 24) return `${diffHrs}h ago`
+  return `${Math.floor(diffHrs / 24)}d ago`
 }
 
 // ── Micro-components ───────────────────────────────────────────────────────

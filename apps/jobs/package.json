@@ -8,6 +8,7 @@
     "job:sync-items": "bun run src/jobs/sync-items.ts",
     "job:sync-prices": "bun run src/jobs/sync-prices.ts",
     "job:sync-passives": "bun run src/jobs/sync-passives.ts",
+
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

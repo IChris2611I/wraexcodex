@@ -119,17 +119,33 @@ export default async function ItemsPage({
   if (activeRarity)   conditions.push(eq(items.rarity,   activeRarity))
   const where = conditions.length ? and(...conditions) : undefined
 
-  // Fetch page + total count in parallel
+  // Fetch page + total count in parallel.
+  // WHY leftJoin on prices:
+  // We want to show a chaos badge on item cards — but we can't do N+1 queries
+  // (one per card). A single LEFT JOIN fetches prices for all 48 cards at once.
+  // We take the most recent price per item via a DISTINCT ON subquery approach;
+  // here we just order by recordedAt desc and rely on Postgres collapsing it via
+  // the DISTINCT ON in the lateral — but for simplicity we just join and take
+  // the first match (Drizzle ORM doesn't support DISTINCT ON directly, so we
+  // use a lateral subquery via raw SQL alias).
+  // Simpler: just LEFT JOIN and accept that duplicate prices are possible in edge
+  // cases (same item priced in two leagues). We disambiguate by LIMIT 1.
   const [rows, countResult] = await Promise.all([
     db
       .select({
-        id:       items.id,
-        slug:     items.slug,
-        name:     items.name,
-        baseType: items.baseType,
-        rarity:   items.rarity,
-        category: items.category,
-        iconUrl:  items.iconUrl,
+        id:         items.id,
+        slug:       items.slug,
+        name:       items.name,
+        baseType:   items.baseType,
+        rarity:     items.rarity,
+        category:   items.category,
+        iconUrl:    items.iconUrl,
+        chaosValue: sql<number | null>`(
+          SELECT p.chaos_value FROM prices p
+          WHERE p.item_id = ${items.id}
+          ORDER BY p.recorded_at DESC
+          LIMIT 1
+        )`,
       })
       .from(items)
       .where(where)
@@ -367,6 +383,7 @@ type ItemRow = {
   rarity: string
   category: string
   iconUrl: string | null
+  chaosValue: number | null
 }
 
 function ItemCard({ item }: { item: ItemRow }) {
@@ -402,6 +419,17 @@ function ItemCard({ item }: { item: ItemRow }) {
         <p className="font-ui text-[10px] text-parchment-muted opacity-60 line-clamp-1">
           {item.baseType}
         </p>
+      )}
+
+      {/* Chaos price badge — only shown when we have price data */}
+      {item.chaosValue != null && (
+        <span className="inline-flex items-center gap-0.5 rounded-sm border border-[#8b2252]/30 bg-[#1a0a1a]/60 px-1.5 py-0.5 font-ui text-[10px] text-parchment-muted">
+          <span className="text-[#c45caa]">✦</span>
+          {item.chaosValue >= 10
+            ? Math.round(item.chaosValue).toLocaleString()
+            : item.chaosValue.toFixed(1)}
+          c
+        </span>
       )}
     </Link>
   )
